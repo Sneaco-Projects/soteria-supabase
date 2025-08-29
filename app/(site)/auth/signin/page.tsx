@@ -52,7 +52,7 @@ export default function SignInForm() {
     }
 
     const role = profileData?.role ?? "warden";
-    if (role === "admin") router.push("/dashboard/admin");      // Architect
+    if (role === "admin") router.push("/dashboard/architect");      // Architect
     else if (role === "warden") router.push("/dashboard/warden");
     else router.push("/");
   };
