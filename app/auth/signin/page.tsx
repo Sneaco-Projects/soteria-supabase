@@ -49,18 +49,19 @@ export default function SignInForm() {
       const display_name =
         (user.user_metadata?.display_name as string | undefined) ??
         (user.email?.split("@")[0] ?? "");
-      await supabase.from("profiles").upsert({
-        id: user.id,
-        email: user.email,
-        display_name,
-        role: "guardian",
-      });
+// fallback upsert (if profile row missing)
+await supabase.from("profiles").upsert({
+  id: user.id,
+  email: user.email,
+  display_name,
+  role: "warden", // was "guardian"
+});
     }
+const role = profileData?.role ?? "warden";
+if (role === "admin") router.push("/dashboard/admin");
+else if (role === "warden") router.push("/dashboard/warden"); // was /guardian
+else router.push("/");
 
-    const role = profileData?.role ?? "guardian";
-    if (role === "admin") router.push("/dashboard/admin");
-    else if (role === "guardian") router.push("/dashboard/guardian");
-    else router.push("/");
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
