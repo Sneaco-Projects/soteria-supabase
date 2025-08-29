@@ -1,3 +1,5 @@
+// app/(site)/how-it-works/page.tsx
+import Navbar from "@/components/site/navbar";
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Phone, MapPin, Heart, Users, Clock, CheckCircle } from "lucide-react"
@@ -5,7 +7,11 @@ import Link from "next/link"
 
 export default function HowItWorksPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden">
+    // Top padding so the fixed Navbar won't overlap
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden pt-24 md:pt-28">
+      {/* Role-aware Navbar */}
+      <Navbar />
+
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
@@ -13,49 +19,8 @@ export default function HowItWorksPage() {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
       </div>
 
-      {/* Floating Navigation */}
-      <nav className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white/80 backdrop-blur-lg border border-emerald-200 rounded-full px-6 py-3 shadow-lg">
-        <div className="flex items-center space-x-8">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
-              <Heart className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-gray-800 font-bold">SOTERIA</span>
-          </div>
-          <div className="hidden md:flex items-center space-x-6 text-gray-600">
-            <Link href="/features" className="hover:text-emerald-600 transition-colors">
-              Features
-            </Link>
-            <Link href="/how-it-works" className="text-emerald-600 font-medium">
-              How It Works
-            </Link>
-            <Link href="/pricing" className="hover:text-emerald-600 transition-colors">
-              Pricing
-            </Link>
-            <Link href="/about" className="hover:text-emerald-600 transition-colors">
-              About
-            </Link>
-            <Link href="/contact" className="hover:text-emerald-600 transition-colors">
-              Contact
-            </Link>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Link href="/auth/signin">
-              <Button variant="ghost" className="text-gray-600 hover:bg-emerald-50">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/auth/signup">
-              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 border-0 text-white">
-                Get Protected
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 relative">
+      {/* Hero Section (no extra top padding here) */}
+      <section className="pb-20 px-4 relative">
         <div className="container mx-auto text-center">
           <h1 className="text-6xl md:text-7xl font-bold text-gray-800 mb-6 leading-tight">
             How SOTERIA
@@ -156,69 +121,69 @@ export default function HowItWorksPage() {
             Behind the Scenes: What Happens When You Press the Button
           </h2>
 
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-8">
-              <div className="flex items-start space-x-6">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
-                    <Clock className="h-6 w-6" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">0-5 Seconds: Alert Initiated</h3>
-                  <p className="text-gray-600">
-                    Device vibrates to confirm button press, LED indicator shows alert status, and GPS location is
-                    acquired. Multiple communication channels activate simultaneously.
-                  </p>
+        <div className="max-w-4xl mx-auto">
+          <div className="space-y-8">
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
+                  <Clock className="h-6 w-6" />
                 </div>
               </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">0-5 Seconds: Alert Initiated</h3>
+                <p className="text-gray-600">
+                  Device vibrates to confirm button press, LED indicator shows alert status, and GPS location is
+                  acquired. Multiple communication channels activate simultaneously.
+                </p>
+              </div>
+            </div>
 
-              <div className="flex items-start space-x-6">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
-                    <Phone className="h-6 w-6" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">5-15 Seconds: Monitoring Center Contacted</h3>
-                  <p className="text-gray-600">
-                    Alert reaches our 24/7 monitoring center with your location, medical profile, and emergency
-                    contacts. Trained professionals begin assessment protocol.
-                  </p>
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
+                  <Phone className="h-6 w-6" />
                 </div>
               </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">5-15 Seconds: Monitoring Center Contacted</h3>
+                <p className="text-gray-600">
+                  Alert reaches our 24/7 monitoring center with your location, medical profile, and emergency
+                  contacts. Trained professionals begin assessment protocol.
+                </p>
+              </div>
+            </div>
 
-              <div className="flex items-start space-x-6">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
-                    <Users className="h-6 w-6" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">15-30 Seconds: Care Team Notified</h3>
-                  <p className="text-gray-600">
-                    Your designated contacts receive SMS alerts and app notifications with your location and alert type.
-                    They can respond directly through the app.
-                  </p>
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
+                  <Users className="h-6 w-6" />
                 </div>
               </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">15-30 Seconds: Care Team Notified</h3>
+                <p className="text-gray-600">
+                  Your designated contacts receive SMS alerts and app notifications with your location and alert type.
+                  They can respond directly through the app.
+                </p>
+              </div>
+            </div>
 
-              <div className="flex items-start space-x-6">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
-                    <CheckCircle className="h-6 w-6" />
-                  </div>
+            <div className="flex items-start space-x-6">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-full flex items-center justify-center font-bold">
+                  <CheckCircle className="h-6 w-6" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">30+ Seconds: Response Coordinated</h3>
-                  <p className="text-gray-600">
-                    Based on your response and alert type, appropriate help is dispatched. You receive confirmation
-                    feedback through device vibration and LED indicators.
-                  </p>
-                </div>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">30+ Seconds: Response Coordinated</h3>
+                <p className="text-gray-600">
+                  Based on your response and alert type, appropriate help is dispatched. You receive confirmation
+                  feedback through device vibration and LED indicators.
+                </p>
               </div>
             </div>
           </div>
+        </div>
         </div>
       </section>
 

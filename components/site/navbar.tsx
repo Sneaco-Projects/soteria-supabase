@@ -1,80 +1,128 @@
+// components/site/navbar.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
-import SignOutButton from "@/components/auth/sign-out-button";
 
-type Role = "warden" | "admin" | "architect" | null;
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase-client";
+
+type Role = "admin" | "warden" | null;
+
+function getDashboardPath(role: Role) {
+  if (role === "admin") return "/dashboard/architect"; // admin → architect dashboard
+  if (role === "warden") return "/dashboard/warden";
+  return "/dashboard/warden";
+}
 
 export default function Navbar() {
-  const [mounted, setMounted] = useState(false);
-  const [authed, setAuthed] = useState<boolean | null>(null);
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    setMounted(true);
+    let mounted = true;
 
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setAuthed(false);
-        setRole(null);
-        return;
+    (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user ?? null;
+
+        if (!mounted) return;
+
+        if (!user) {
+          setRole(null);
+          setEmail(null);
+          setLoading(false);
+          return;
+        }
+
+        setEmail(user.email ?? null);
+
+        // Read role from profiles (fallback to 'warden' if missing)
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!mounted) return;
+        setRole((prof?.role as Role) ?? "warden");
+      } catch {
+        // swallow — show signed-out state on error
+        if (mounted) {
+          setRole(null);
+          setEmail(null);
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
+    })();
 
-      setAuthed(true);
-
-      // read role (fallback to warden)
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const r = (prof?.role as Role) ?? "warden";
-      setRole(r === "architect" ? "admin" : r); // normalize if you store "architect"
+    return () => {
+      mounted = false;
     };
-
-    load();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
-    return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Avoid flicker on first render
-  if (!mounted) return null;
-
-  const dashHref =
-    role === "admin" ? "/dashboard/architect" : "/dashboard/warden";
+  const onSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.push("/"); // back to marketing site
+      router.refresh();
+    }
+  };
 
   return (
-    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-lg border border-emerald-200 rounded-full px-6 py-3 shadow-lg">
-      <div className="flex items-center space-x-8">
-        <div className="flex items-center space-x-2">
+    <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-lg border border-emerald-200 rounded-full px-6 py-3 shadow-lg w-[min(100%,1100px)]">
+      <div className="flex items-center justify-between gap-4">
+        {/* Brand */}
+        <Link href="/" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
             <Heart className="h-4 w-4 text-white" />
           </div>
           <span className="text-gray-800 font-bold">SOTERIA</span>
-        </div>
+        </Link>
 
+        {/* Center links (hide on small screens) */}
         <div className="hidden md:flex items-center space-x-6 text-gray-600">
-          <Link href="/features" className="hover:text-emerald-600 transition-colors">Features</Link>
-          <Link href="/how-it-works" className="hover:text-emerald-600 transition-colors">How It Works</Link>
-          <Link href="/pricing" className="hover:text-emerald-600 transition-colors">Pricing</Link>
-          <Link href="/faq" className="hover:text-emerald-600 transition-colors">FAQ</Link>
-          <Link href="/contact" className="hover:text-emerald-600 transition-colors">Contact</Link>
+          <Link href="/features" className="hover:text-emerald-600 transition-colors">
+            Features
+          </Link>
+          <Link href="/how-it-works" className="hover:text-emerald-600 transition-colors">
+            How It Works
+          </Link>
+          <Link href="/pricing" className="hover:text-emerald-600 transition-colors">
+            Pricing
+          </Link>
         </div>
 
-        <div className="flex items-center space-x-3">
-          {authed === null && (
-            // tiny skeleton to avoid layout shift
-            <div className="w-44 h-9 rounded-full bg-emerald-100/60 animate-pulse" />
-          )}
-
-          {authed === false && (
+        {/* Right side actions */}
+        <div className="flex items-center gap-2">
+          {/* Loading shimmer to avoid flicker */}
+          {loading ? (
+            <div className="h-9 w-40 rounded-full bg-emerald-100/60 animate-pulse" />
+          ) : role ? (
+            <>
+              <Button
+                variant="outline"
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => router.push(getDashboardPath(role))}
+              >
+                Go to Dashboard
+              </Button>
+              <Button
+                onClick={onSignOut}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white border-0"
+                title={email ?? undefined}
+              >
+                Sign Out
+              </Button>
+            </>
+          ) : (
             <>
               <Link href="/auth/signin">
                 <Button variant="ghost" className="text-gray-600 hover:bg-emerald-50">
@@ -86,17 +134,6 @@ export default function Navbar() {
                   Get Protected
                 </Button>
               </Link>
-            </>
-          )}
-
-          {authed === true && (
-            <>
-              <Link href={dashHref}>
-                <Button variant="ghost" className="text-gray-700 hover:bg-emerald-50">
-                  Go to Dashboard
-                </Button>
-              </Link>
-              <SignOutButton />
             </>
           )}
         </div>
