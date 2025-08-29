@@ -98,6 +98,19 @@ export default function Navbar() {
           <Link href="/pricing" className="hover:text-emerald-600 transition-colors">
             Pricing
           </Link>
+            <Link href="/about" className="hover:text-emerald-600 transition-colors">
+            About
+            </Link>
+            <Link href="/contact" className="hover:text-emerald-600 transition-colors">
+            Contact
+            </Link>
+            <Link href="/faq" className="hover:text-emerald-600 transition-colors">
+            FAQ
+            </Link>
+            
+
+
+
         </div>
 
         {/* Right side actions */}
