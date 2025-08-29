@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Heart, AlertTriangle, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, Heart, AlertTriangle, CheckCircle, CheckCircle2, Circle } from "lucide-react";
 import { supabase } from "@/lib/supabase-client";
 
 /** Modal */
@@ -21,10 +21,39 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+type SignUpForm = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+};
+
+// --- validators (edit copy/requirements here) ---
+const validatePassword = (pwd: string): string | null => {
+  const unmet: string[] = [];
+  if (pwd.length < 12) unmet.push("• At least 12 characters");
+  if (!/[A-Z]/.test(pwd)) unmet.push("• At least one uppercase letter (A–Z)");
+  if (!/[a-z]/.test(pwd)) unmet.push("• At least one lowercase letter (a–z)");
+  if (!/\d/.test(pwd)) unmet.push("• At least one number (0–9)");
+  if (!/[^A-Za-z0-9]/.test(pwd)) unmet.push("• At least one symbol (!@#$…)");
+  if (/\s/.test(pwd)) unmet.push("• No spaces");
+  return unmet.length ? `Please use a stronger password:\n${unmet.join("\n")}` : null;
+};
+
+const mapAuthError = (msg?: string): string => {
+  if (!msg) return "Something went wrong.";
+  if (msg.toLowerCase().includes("password")) {
+    return "That password doesn’t meet our requirements. Try a longer one with a mix of letters, numbers, and a symbol.";
+  }
+  return msg;
+};
+
 export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SignUpForm>({
     firstName: "",
     lastName: "",
     email: "",
@@ -34,16 +63,29 @@ export default function SignUpForm() {
   });
   const [loading, setLoading] = useState(false);
 
-  /** modal state */
+  // modal state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [successAction, setSuccessAction] = useState<null | "gotoSignIn" | "routeByRole">(null);
 
   const router = useRouter();
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = <K extends keyof SignUpForm>(field: K, value: SignUpForm[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  // live password checklist state
+  const req = useMemo(() => {
+    const pwd = formData.password;
+    return {
+      len: pwd.length >= 12,
+      up: /[A-Z]/.test(pwd),
+      lo: /[a-z]/.test(pwd),
+      num: /\d/.test(pwd),
+      sym: /[^A-Za-z0-9]/.test(pwd),
+      sp: !/\s/.test(pwd),
+    };
+  }, [formData.password]);
 
   const routeByRole = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -55,7 +97,7 @@ export default function SignUpForm() {
       .eq("id", user.id)
       .maybeSingle();
 
-    // Soft fallback: ensure a row exists (do NOT use formData here)
+    // Soft fallback: ensure a row exists (no formData used here)
     if (!profileData || error) {
       const display_name =
         (user.user_metadata?.display_name as string | undefined) ??
@@ -82,6 +124,12 @@ export default function SignUpForm() {
       return;
     }
 
+    const strengthErr = validatePassword(formData.password);
+    if (strengthErr) {
+      setErrorMsg(strengthErr);
+      return;
+    }
+
     setLoading(true);
     try {
       const display_name = `${formData.firstName} ${formData.lastName}`.trim();
@@ -95,24 +143,21 @@ export default function SignUpForm() {
 
       const hasSession = Boolean(data.session);
       if (!hasSession) {
-        // Email confirmation required
         setSuccessMsg("Check your email to confirm your account, then sign in.");
         setSuccessAction("gotoSignIn");
         return;
       }
 
-      // Immediate session (confirmation OFF)
       setSuccessMsg("Account created successfully. Welcome to SOTERIA!");
       setSuccessAction("routeByRole");
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err?.message ?? "Sign up failed.");
+      setErrorMsg(mapAuthError(err?.message));
     } finally {
       setLoading(false);
     }
   };
 
-  /** Close success modal → perform queued action */
   const handleSuccessClose = async () => {
     const action = successAction;
     setSuccessMsg(null);
@@ -259,6 +304,26 @@ export default function SignUpForm() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+
+                  {/* Live checklist */}
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {[
+                      ["len", "At least 12 characters"],
+                      ["up", "One uppercase letter (A–Z)"],
+                      ["lo", "One lowercase letter (a–z)"],
+                      ["num", "One number (0–9)"],
+                      ["sym", "One symbol (!@#$…)"],
+                      ["sp", "No spaces"],
+                    ].map(([k, label]) => {
+                      const ok = req[k as keyof typeof req];
+                      return (
+                        <li key={k} className={`flex items-center gap-2 ${ok ? "text-emerald-600" : "text-gray-500"}`}>
+                          {ok ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                          <span>{label}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
 
                 <div className="space-y-2">
