@@ -1,5 +1,7 @@
 "use client"
 
+import "./globals.css";
+import Navbar from "@/components/site/navbar";
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -54,39 +56,15 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden">
+      {/* Role-aware Navbar */}
+      <Navbar />
+
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse delay-1000"></div>
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
       </div>
-
-      {/* Floating Navigation */}
-      <nav className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white/80 backdrop-blur-lg border border-emerald-200 rounded-full px-6 py-3 shadow-lg">
-        <div className="flex items-center space-x-8">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
-              <Heart className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-gray-800 font-bold">SOTERIA</span>
-          </div>
-          <div className="hidden md:flex items-center space-x-6 text-gray-600">
-            <Link href="/features" className="hover:text-emerald-600 transition-colors">Features</Link>
-            <Link href="/how-it-works" className="hover:text-emerald-600 transition-colors">How It Works</Link>
-            <Link href="/pricing" className="hover:text-emerald-600 transition-colors">Pricing</Link>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Link href="/auth/signin">
-              <Button variant="ghost" className="text-gray-600 hover:bg-emerald-50">Sign In</Button>
-            </Link>
-            <Link href="/auth/signup">
-              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 border-0 text-white">
-                Get Protected
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-4 relative">
@@ -461,6 +439,7 @@ export default function HomePage() {
             <p>&copy; 2024 SOTERIA. Saving lives, one heartbeat at a time.</p>
           </div>
         </div>
+        
       </footer>
 
       <style jsx>{`
