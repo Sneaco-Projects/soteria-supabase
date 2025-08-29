@@ -19,25 +19,35 @@ export default function SignInForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const routeByRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return router.push("/");
+const routeByRole = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return router.push("/");
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
+  const { data: profileData, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
 
-    if (error) {
-      console.error(error);
-      return router.push("/");
-    }
+  // Soft fallback: ensure a row exists (do NOT use formData here)
+  if (!profileData || error) {
+    const display_name =
+      (user.user_metadata?.display_name as string | undefined) ??
+      (user.email?.split("@")[0] ?? "");
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      email: user.email,
+      display_name,
+      role: "guardian",
+    });
+  }
 
-    if (profile?.role === "admin") router.push("/dashboard/admin");
-    else if (profile?.role === "guardian") router.push("/dashboard/guardian");
-    else router.push("/");
-  };
+  const role = profileData?.role ?? "guardian";
+  if (role === "admin") router.push("/dashboard/admin");
+  else if (role === "guardian") router.push("/dashboard/guardian");
+  else router.push("/");
+};
+
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,9 +143,6 @@ export default function SignInForm() {
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
-
-            {/* Google removed since you don't use it yet */}
-            {/* <div className="mt-6"> ... </div> */}
 
             <p className="text-center text-sm text-gray-600 mt-6">
               {"Don't have an account? "}

@@ -7,9 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, EyeOff, Heart } from "lucide-react";
-
 import { supabase } from "@/lib/supabase-client";
 
 export default function SignUpForm() {
@@ -19,10 +17,9 @@ export default function SignUpForm() {
     firstName: "",
     lastName: "",
     email: "",
+    phone: "",
     password: "",
     confirmPassword: "",
-    role: "",
-    phone: "",
   });
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -31,11 +28,35 @@ export default function SignUpForm() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const routeByRole = (role?: string) => {
-    if (role === "admin") router.push("/dashboard/admin");
-    else if (role === "guardian") router.push("/dashboard/guardian");
-    else router.push("/");
-  };
+  const routeByRole = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return router.push("/");
+
+  const { data: profileData, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  // Soft fallback: ensure a row exists (do NOT use formData here)
+  if (!profileData || error) {
+    const display_name =
+      (user.user_metadata?.display_name as string | undefined) ??
+      (user.email?.split("@")[0] ?? "");
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      email: user.email,
+      display_name,
+      role: "guardian",
+    });
+  }
+
+  const role = profileData?.role ?? "guardian";
+  if (role === "admin") router.push("/dashboard/admin");
+  else if (role === "guardian") router.push("/dashboard/guardian");
+  else router.push("/");
+};
+
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,52 +65,31 @@ export default function SignUpForm() {
       alert("Passwords do not match");
       return;
     }
-    if (!formData.role) {
-      alert("Please select a role");
-      return;
-    }
 
     setLoading(true);
     try {
-      // 1) Create auth user
+      const display_name = `${formData.firstName} ${formData.lastName}`.trim();
+
+      // 1) Create auth user (no role choice here; DB trigger defaults to guardian)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: {
-            display_name: `${formData.firstName} ${formData.lastName}`,
-            phone: formData.phone,
-          },
-        },
+        options: { data: { display_name, phone: formData.phone } },
       });
       if (error) throw error;
 
-      // If email confirmations are OFF, a session exists now.
-      // If ON, there is no session until user clicks email link.
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        // No session yet (confirmations ON). Tell user to check email, then push to sign-in.
+      // 2) If email confirmations are ON, there's no session yet -> ask to verify and send to sign-in
+      const hasSession = Boolean(data.session);
+      if (!hasSession) {
         alert("Check your email to confirm your account, then sign in.");
         return router.push("/auth/signin");
       }
 
-      // 2) Upsert into profiles (safe even if you also have a signup trigger)
-      const role = formData.role as "admin" | "guardian" | "user" | "organization" | "healthcare";
-      const displayName = `${formData.firstName} ${formData.lastName}`;
-
-      const { error: upsertErr } = await supabase.from("profiles").upsert({
-        id: user.id,
-        email: formData.email,
-        display_name: displayName,
-        role: role === "organization" || role === "healthcare" ? "user" : role, // map extra roles to 'user' if you want
-      });
-      if (upsertErr) throw upsertErr;
-
-      routeByRole(role);
+      // 3) If confirmations are OFF, we have a session -> route by role (guardian default)
+      await routeByRole();
     } catch (err: any) {
-      alert(err?.message ?? "Sign up failed.");
       console.error(err);
+      alert(err?.message ?? "Sign up failed.");
     } finally {
       setLoading(false);
     }
@@ -165,7 +165,7 @@ export default function SignUpForm() {
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="+63 9XX XXX XXXX"
                   value={formData.phone}
                   onChange={(e) => handleInputChange("phone", e.target.value)}
                   className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
@@ -173,20 +173,7 @@ export default function SignUpForm() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="role" className="text-gray-700">I am a...</Label>
-                <Select onValueChange={(value) => handleInputChange("role", value)}>
-                  <SelectTrigger className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500">
-                    <SelectValue placeholder="Select your role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="guardian">Guardian/Family Member</SelectItem>
-                    <SelectItem value="user">Device User (Sentinel)</SelectItem>
-                    <SelectItem value="organization">Organization/Company</SelectItem>
-                    <SelectItem value="healthcare">Healthcare Provider</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Role selector removed: all sign-ups are guardian by default */}
 
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-gray-700">Password</Label>
@@ -221,7 +208,7 @@ export default function SignUpForm() {
                     placeholder="Confirm your password"
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                    className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
+                    className="bg-white/80 border-emerald-200 focus:border-emerald-500"
                     required
                   />
                   <Button
@@ -254,9 +241,6 @@ export default function SignUpForm() {
                 {loading ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
-
-            {/* Google sign-up removed for now */}
-            {/* <div className="mt-6">...</div> */}
 
             <p className="text-center text-sm text-gray-600 mt-6">
               Already have an account?{" "}
