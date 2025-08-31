@@ -14,7 +14,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 
-import { CheckCircle, AlertTriangle, Users, Link2, Heart } from "lucide-react";
+import { CheckCircle, AlertTriangle, Users, Link2, Heart, Menu, LogOut } from "lucide-react";
 
 type ProviderRow = { user_id: string; display_name: string | null; active: boolean; created_at: string };
 type ProfileRow  = { id: string; email: string; display_name: string | null };
@@ -24,6 +24,10 @@ export default function ArchitectDashboard() {
   // modals
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // sidebar + tabs UI
+  const [collapsed, setCollapsed] = useState(false);
+  const [tab, setTab] = useState<"providers" | "assignments">("providers");
 
   // Providers tab
   const [providers, setProviders] = useState<ProviderRow[]>([]);
@@ -172,6 +176,15 @@ export default function ArchitectDashboard() {
     return map;
   }, [assignments]);
 
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setSuccessMsg("Signed out.");
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to sign out.");
+    }
+  };
+
   return (
     <>
       {/* Error Modal */}
@@ -204,183 +217,228 @@ export default function ArchitectDashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Page */}
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-        </div>
-
-        <header className="bg-white/80 backdrop-blur-lg border-b border-emerald-200 px-6 py-4 sticky top-0 z-50">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-2">
+      {/* Layout with Sidebar */}
+      <div className="min-h-screen flex bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+        {/* Sidebar */}
+        <aside
+          className={`sticky top-0 h-screen border-r border-emerald-200 bg-white/80 backdrop-blur-lg transition-all duration-300 ${
+            collapsed ? "w-16" : "w-64"
+          }`}
+        >
+          <div className="flex items-center justify-between px-3 py-4">
+            <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
                 <Heart className="h-4 w-4 text-white" />
               </div>
-              <span className="text-xl font-bold text-gray-800">SOTERIA Architect</span>
+              {!collapsed && <span className="text-base font-bold text-gray-800">SOTERIA Architect</span>}
             </Link>
+            <Button variant="ghost" size="icon" onClick={() => setCollapsed(v => !v)}>
+              <Menu className="h-5 w-5 text-gray-700" />
+            </Button>
           </div>
-        </header>
 
-        <div className="p-6 relative z-10">
-          <Tabs defaultValue="providers" className="space-y-6">
-            <TabsList className="bg-white/80 backdrop-blur-lg border border-emerald-200">
-              <TabsTrigger
-                value="providers"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white"
-              >
-                Providers
-              </TabsTrigger>
-              <TabsTrigger
-                value="assignments"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white"
-              >
-                Assignments
-              </TabsTrigger>
-            </TabsList>
+          <nav className="px-2 space-y-1">
+            <Button
+              variant={tab === "providers" ? "default" : "ghost"}
+              className={`w-full justify-start ${tab === "providers"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
+                  : "text-gray-700 hover:bg-emerald-50"}`
+              }
+              onClick={() => setTab("providers")}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              {!collapsed && "Providers"}
+            </Button>
 
-            {/* Providers tab */}
-            <TabsContent value="providers">
-              <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-gray-800">Healthcare Providers</CardTitle>
-                  <CardDescription className="text-gray-600">Promote users and manage activation.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
-                      <Label>Email to promote</Label>
-                      <Input
-                        placeholder="provider@example.com"
-                        value={promoteEmail}
-                        onChange={(e) => setPromoteEmail(e.target.value)}
-                        className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
-                      />
+            <Button
+              variant={tab === "assignments" ? "default" : "ghost"}
+              className={`w-full justify-start ${tab === "assignments"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
+                  : "text-gray-700 hover:bg-emerald-50"}`
+              }
+              onClick={() => setTab("assignments")}
+            >
+              <Link2 className="h-4 w-4 mr-2" />
+              {!collapsed && "Assignments"}
+            </Button>
+          </nav>
+
+          <div className="mt-auto px-2 py-4">
+            <Button variant="ghost" className="w-full justify-start text-gray-700 hover:bg-emerald-50" onClick={signOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              {!collapsed && "Sign out"}
+            </Button>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 relative overflow-x-hidden">
+          {/* Animated Background Elements */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
+            <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse delay-1000"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
+          </div>
+
+          <div className="p-6 relative z-10">
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "providers" | "assignments")} className="space-y-6">
+              <TabsList className="bg-white/80 backdrop-blur-lg border border-emerald-200">
+                <TabsTrigger
+                  value="providers"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white"
+                >
+                  Providers
+                </TabsTrigger>
+                <TabsTrigger
+                  value="assignments"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white"
+                >
+                  Assignments
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Providers tab */}
+              <TabsContent value="providers">
+                <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-gray-800">Healthcare Providers</CardTitle>
+                    <CardDescription className="text-gray-600">Promote users and manage activation.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <Label>Email to promote</Label>
+                        <Input
+                          placeholder="provider@example.com"
+                          value={promoteEmail}
+                          onChange={(e) => setPromoteEmail(e.target.value)}
+                          className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <Button onClick={promote} className="bg-emerald-600 hover:bg-emerald-700">Promote</Button>
                     </div>
-                    <Button onClick={promote} className="bg-emerald-600 hover:bg-emerald-700">Promote</Button>
-                  </div>
 
-                  <div className="grid gap-3">
-                    {providers.length === 0 && (
-                      <Card className="border-emerald-100 bg-white/70">
-                        <CardContent className="py-6 text-gray-600">No providers yet.</CardContent>
-                      </Card>
-                    )}
-                    {providers.map((p) => {
-                      const prof = profilesById[p.user_id];
-                      return (
-                        <Card key={p.user_id} className="border-emerald-100 bg-white/80">
-                          <CardContent className="py-4 flex items-center justify-between">
-                            <div>
-                              <div className="font-medium text-gray-800">
-                                {p.display_name || prof?.display_name || prof?.email || p.user_id}
+                    <div className="grid gap-3">
+                      {providers.length === 0 && (
+                        <Card className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-6 text-gray-600">No providers yet.</CardContent>
+                        </Card>
+                      )}
+                      {providers.map((p) => {
+                        const prof = profilesById[p.user_id];
+                        return (
+                          <Card key={p.user_id} className="border-emerald-100 bg-white/80">
+                            <CardContent className="py-4 flex items-center justify-between">
+                              <div>
+                                <div className="font-medium text-gray-800">
+                                  {p.display_name || prof?.display_name || prof?.email || p.user_id}
+                                </div>
+                                <div className="text-sm text-gray-600">{prof?.email}</div>
                               </div>
-                              <div className="text-sm text-gray-600">{prof?.email}</div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button variant="outline" onClick={() => toggleProvider(p.user_id, p.active)}>
-                                {p.active ? "Deactivate" : "Activate"}
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                              <div className="flex gap-2">
+                                <Button variant="outline" onClick={() => toggleProvider(p.user_id, p.active)}>
+                                  {p.active ? "Deactivate" : "Activate"}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-            {/* Assignments tab */}
-            <TabsContent value="assignments">
-              <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-gray-800">Provider ↔ Sentinel Assignments</CardTitle>
-                  <CardDescription className="text-gray-600">
-                    Assign active providers to specific sentinels.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                      <Label>Provider</Label>
-                      <select
-                        className="w-full border rounded-md p-2 bg-white/80 border-emerald-200"
-                        value={assignProviderId}
-                        onChange={(e) => setAssignProviderId(e.target.value)}
-                      >
-                        <option value="">Select provider</option>
-                        {activeProviders.map((p) => (
-                          <option key={p.user_id} value={p.user_id}>
-                            {p.display_name || p.user_id}
-                          </option>
-                        ))}
-                      </select>
+              {/* Assignments tab */}
+              <TabsContent value="assignments">
+                <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-gray-800">Provider ↔ Sentinel Assignments</CardTitle>
+                    <CardDescription className="text-gray-600">
+                      Assign active providers to specific sentinels.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid md:grid-cols-3 gap-3">
+                      <div>
+                        <Label>Provider</Label>
+                        <select
+                          className="w-full border rounded-md p-2 bg-white/80 border-emerald-200"
+                          value={assignProviderId}
+                          onChange={(e) => setAssignProviderId(e.target.value)}
+                        >
+                          <option value="">Select provider</option>
+                          {activeProviders.map((p) => (
+                            <option key={p.user_id} value={p.user_id}>
+                              {p.display_name || p.user_id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label>Sentinel</Label>
+                        <select
+                          className="w-full border rounded-md p-2 bg-white/80 border-emerald-200"
+                          value={assignSentinelId}
+                          onChange={(e) => setAssignSentinelId(e.target.value)}
+                        >
+                          <option value="">Select sentinel</option>
+                          {sentinels.map((s) => (
+                            <option key={s.id} value={s.id}>{s.full_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <Button onClick={assign} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                          <Link2 className="h-4 w-4 mr-2" /> Assign
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <Label>Sentinel</Label>
-                      <select
-                        className="w-full border rounded-md p-2 bg-white/80 border-emerald-200"
-                        value={assignSentinelId}
-                        onChange={(e) => setAssignSentinelId(e.target.value)}
-                      >
-                        <option value="">Select sentinel</option>
-                        {sentinels.map((s) => (
-                          <option key={s.id} value={s.id}>{s.full_name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-end">
-                      <Button onClick={assign} className="w-full bg-emerald-600 hover:bg-emerald-700">
-                        <Link2 className="h-4 w-4 mr-2" /> Assign
-                      </Button>
-                    </div>
-                  </div>
 
-                  {/* List by sentinel */}
-                  <div className="grid gap-3">
-                    {sentinels.length === 0 && (
-                      <Card className="border-emerald-100 bg-white/70">
-                        <CardContent className="py-6 text-gray-600">No sentinels yet.</CardContent>
-                      </Card>
-                    )}
-                    {sentinels.map((s) => {
-                      const provIds = bySentinel[s.id] || [];
-                      return (
-                        <Card key={s.id} className="border-emerald-100 bg-white/80">
-                          <CardHeader className="py-3">
-                            <CardTitle className="text-base">{s.full_name}</CardTitle>
-                          </CardHeader>
-                          <CardContent className="py-3">
-                            {provIds.length === 0 && <div className="text-sm text-gray-600">No providers assigned.</div>}
-                            {provIds.length > 0 && (
-                              <ul className="space-y-2">
-                                {provIds.map((pid) => {
-                                  const row = providers.find(p => p.user_id === pid);
-                                  const prof = row ? profilesById[row.user_id] : undefined;
-                                  const name = row?.display_name || prof?.display_name || prof?.email || pid;
-                                  return (
-                                    <li key={pid} className="flex items-center justify-between">
-                                      <span className="text-sm text-gray-800">{name}</span>
-                                      <Button variant="outline" size="sm" onClick={() => unassign(pid, s.id)}>
-                                        Unassign
-                                      </Button>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </CardContent>
+                    {/* List by sentinel */}
+                    <div className="grid gap-3">
+                      {sentinels.length === 0 && (
+                        <Card className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-6 text-gray-600">No sentinels yet.</CardContent>
                         </Card>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+                      )}
+                      {sentinels.map((s) => {
+                        const provIds = bySentinel[s.id] || [];
+                        return (
+                          <Card key={s.id} className="border-emerald-100 bg-white/80">
+                            <CardHeader className="py-3">
+                              <CardTitle className="text-base">{s.full_name}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="py-3">
+                              {provIds.length === 0 && <div className="text-sm text-gray-600">No providers assigned.</div>}
+                              {provIds.length > 0 && (
+                                <ul className="space-y-2">
+                                  {provIds.map((pid) => {
+                                    const row = providers.find(p => p.user_id === pid);
+                                    const prof = row ? profilesById[row.user_id] : undefined;
+                                    const name = row?.display_name || prof?.display_name || prof?.email || pid;
+                                    return (
+                                      <li key={pid} className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-800">{name}</span>
+                                        <Button variant="outline" size="sm" onClick={() => unassign(pid, s.id)}>
+                                          Unassign
+                                        </Button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </main>
       </div>
     </>
   );
