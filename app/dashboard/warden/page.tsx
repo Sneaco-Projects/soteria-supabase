@@ -196,7 +196,7 @@ export default function WardenDashboard() {
           )}
 
           {/* Actions */}
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end mb-4 mt-2">
             <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700">
               <Plus className="h-4 w-4 mr-2" /> Add Sentinel
             </Button>
