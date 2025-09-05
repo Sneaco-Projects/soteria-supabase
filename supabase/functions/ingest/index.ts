@@ -19,6 +19,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log("DEVICE_INGEST_SECRET present:", !!Deno.env.get("DEVICE_INGEST_SECRET"));
+
     if (req.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
     }

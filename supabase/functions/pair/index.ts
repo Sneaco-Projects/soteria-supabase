@@ -14,6 +14,8 @@ const SUPA_URL = Deno.env.get("SB_URL") ?? Deno.env.get("SUPABASE_URL");
 const SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 serve(async (req) => {
+    console.log("DEVICE_INGEST_SECRET present:", !!Deno.env.get("DEVICE_INGEST_SECRET"));
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
