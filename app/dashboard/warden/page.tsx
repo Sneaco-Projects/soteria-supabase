@@ -19,7 +19,7 @@ import {
 
 import {
   Plus, User, Phone, StickyNote, AlertTriangle, CheckCircle,
-  MoreHorizontal, Pencil, Trash2
+  MoreHorizontal, Pencil, Trash2, Link as LinkIcon
 } from "lucide-react";
 
 type Sentinel = { id: string; full_name: string; phone: string | null; notes: string | null };
@@ -44,6 +44,14 @@ export default function WardenDashboard() {
   // Delete confirm
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Pair Device modal
+  const [openPair, setOpenPair] = useState(false);
+  const [pairSentinelId, setPairSentinelId] = useState<string | null>(null);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairExpires, setPairExpires] = useState<string | null>(null);
+  const [pairHwUid, setPairHwUid] = useState(""); // optional lock to known device
+  const [pairLoading, setPairLoading] = useState(false);
 
   // Modals (global)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -150,6 +158,49 @@ export default function WardenDashboard() {
     }
   };
 
+  // --- Pair Device helpers ---
+  const openPairFor = (s: Sentinel) => {
+    setPairSentinelId(s.id);
+    setPairCode(null);
+    setPairExpires(null);
+    setPairHwUid("");
+    setOpenPair(true);
+  };
+
+  const requestPairCode = async () => {
+    if (!pairSentinelId) return;
+    setPairLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in.");
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-claim`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            sentinel_id: pairSentinelId,
+            hw_uid: pairHwUid || undefined,
+          }),
+        }
+      );
+
+      if (!res.ok) throw new Error(await res.text());
+      const { code, expires_at } = await res.json();
+      setPairCode(code);
+      setPairExpires(expires_at);
+      setSuccessMsg("Pairing code generated.");
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to create pairing code.");
+    } finally {
+      setPairLoading(false);
+    }
+  };
+
   return (
     <>
       {/* Error / Success Modals */}
@@ -216,7 +267,12 @@ export default function WardenDashboard() {
                       <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditFor(s)}><Pencil className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openPairFor(s)}>
+                        <LinkIcon className="h-4 w-4 mr-2" /> Pair device
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openEditFor(s)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Edit
+                      </DropdownMenuItem>
                       <DropdownMenuItem className="text-red-600" onClick={() => askDelete(s.id)}>
                         <Trash2 className="h-4 w-4 mr-2" /> Delete
                       </DropdownMenuItem>
@@ -296,6 +352,51 @@ export default function WardenDashboard() {
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setOpenDelete(false)}>Cancel</AlertDialogAction>
             <Button onClick={deleteSentinel} className="bg-red-600 hover:bg-red-700 text-white">Delete</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Pair Device Modal */}
+      <AlertDialog open={openPair} onOpenChange={setOpenPair}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pair device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Generate a short code and enter it on the device. Optionally lock the claim to a specific HW UID.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Lock to HW UID (optional)</Label>
+              <Input
+                value={pairHwUid}
+                onChange={(e) => setPairHwUid(e.target.value)}
+                placeholder="IMEI / printed UID"
+              />
+            </div>
+
+            {!pairCode ? (
+              <Button
+                onClick={requestPairCode}
+                className="bg-emerald-600 hover:bg-emerald-700"
+                disabled={pairLoading || !pairSentinelId}
+              >
+                {pairLoading ? "Generating…" : "Generate code"}
+              </Button>
+            ) : (
+              <div className="rounded-md border p-3 bg-white/80">
+                <div className="text-sm text-gray-600">Code</div>
+                <div className="text-2xl font-mono tracking-wider">{pairCode}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Expires: {new Date(pairExpires!).toLocaleString()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setOpenPair(false)}>Close</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
