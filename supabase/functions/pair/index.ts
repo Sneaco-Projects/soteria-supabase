@@ -14,8 +14,6 @@ const SUPA_URL = Deno.env.get("SB_URL") ?? Deno.env.get("SUPABASE_URL");
 const SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 serve(async (req) => {
-    console.log("DEVICE_INGEST_SECRET present:", !!Deno.env.get("DEVICE_INGEST_SECRET"));
-
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -32,8 +30,11 @@ serve(async (req) => {
       });
     }
 
-    const devSecret = req.headers.get("x-device-secret");
-    if (devSecret !== Deno.env.get("DEVICE_INGEST_SECRET")) {
+    // ---- Robust secret check (diagnostic) ----
+    const got = (req.headers.get("x-device-secret") ?? "").trim();
+    const exp = (Deno.env.get("DEVICE_INGEST_SECRET") ?? "").trim();
+    console.log("x-device-secret len:", got.length, "env len:", exp.length, "match:", got === exp);
+    if (!got || !exp || got !== exp) {
       return new Response("Unauthorized", { status: 401, headers: corsHeaders });
     }
 

@@ -19,8 +19,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log("DEVICE_INGEST_SECRET present:", !!Deno.env.get("DEVICE_INGEST_SECRET"));
-
     if (req.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
     }
@@ -32,8 +30,11 @@ serve(async (req) => {
       });
     }
 
-    const devSecret = req.headers.get("x-device-secret");
-    if (devSecret !== Deno.env.get("DEVICE_INGEST_SECRET")) {
+    // ---- Robust secret check (diagnostic) ----
+    const got = (req.headers.get("x-device-secret") ?? "").trim();
+    const exp = (Deno.env.get("DEVICE_INGEST_SECRET") ?? "").trim();
+    console.log("x-device-secret len:", got.length, "env len:", exp.length, "match:", got === exp);
+    if (!got || !exp || got !== exp) {
       return new Response("Unauthorized", { status: 401, headers: corsHeaders });
     }
 
