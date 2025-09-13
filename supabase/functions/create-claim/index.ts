@@ -4,10 +4,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ---- CORS ----
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*", // or lock to your Vercel domain
-  "Access-Control-Allow-Headers": "authorization, x-device-secret, content-type",
+  "Access-Control-Allow-Origin": "*",
+  // add apikey (and x-client-info which supabase adds)
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, x-device-secret, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
 
 // ---- Env (new names with fallbacks) ----
 const SUPA_URL = Deno.env.get("SB_URL") ?? Deno.env.get("SUPABASE_URL");

@@ -200,35 +200,35 @@ export default function WardenDashboard() {
     setOpenPair(true);
   };
 
-  const requestPairCode = async () => {
-    if (!pairSentinelId) return;
-    setPairLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not signed in.");
+const requestPairCode = async () => {
+  if (!pairSentinelId) return;
+  setPairLoading(true);
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not signed in.");
 
-      // Use Supabase client to call Edge Function so it auto-sends the apikey header
-      const { data, error } = await supabase.functions.invoke("create-claim", {
-        body: {
-          sentinel_id: pairSentinelId,
-          hw_uid: pairHwUid || undefined,
-        },
-        headers: {
-          // pass the end-user JWT so RLS runs as the user
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+    const { data, error } = await supabase.functions.invoke("create-claim", {
+      body: {
+        sentinel_id: pairSentinelId,
+        hw_uid: pairHwUid || undefined,
+      },
+      headers: {
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,         // ensures gateway is happy
+        Authorization: `Bearer ${session.access_token}`,            // run RLS as the user
+      },
+    });
 
-      if (error) throw new Error(error.message || "Failed to create pairing code.");
-      setPairCode((data as any).code);
-      setPairExpires((data as any).expires_at);
-      setSuccessMsg("Pairing code generated.");
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to create pairing code.");
-    } finally {
-      setPairLoading(false);
-    }
-  };
+    if (error) throw new Error(error.message || "Failed to create pairing code.");
+    setPairCode((data as any).code);
+    setPairExpires((data as any).expires_at);
+    setSuccessMsg("Pairing code generated.");
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? "Failed to create pairing code.");
+  } finally {
+    setPairLoading(false);
+  }
+};
+
 
   const copyPairCode = async () => {
     if (!pairCode) return;
