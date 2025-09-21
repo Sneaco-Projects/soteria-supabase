@@ -3,8 +3,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils"; // if you don't have cn, replace cn(...) with a template string
-import { Heart, Home, Users, Link2, PanelsTopLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Heart, Home, Users, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
@@ -39,15 +39,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Nav */}
         <nav className="mt-2 px-1">
           <SideLink href="/dashboard" icon={<Home className="w-4 h-4" />} open={open} label="Overview" />
-          <SideLink href="/dashboard/architect" icon={<PanelsTopLeft className="w-4 h-4" />} open={open} label="Architect" />
           <SideLink href="/dashboard/warden" icon={<Users className="w-4 h-4" />} open={open} label="Warden" />
-          <SideLink href="/dashboard/assignments" icon={<Link2 className="w-4 h-4" />} open={open} label="Assignments" />
         </nav>
       </aside>
 
       {/* Main content */}
       <main className={cn("transition-all duration-200", open ? "ml-64" : "ml-16")}>
-        {/* top spacer for nice breathing room */}
         <div className="h-4" />
         <div className="p-6">{children}</div>
       </main>

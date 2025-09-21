@@ -39,12 +39,8 @@ import {
   Search,
   Loader2,
   Copy as CopyIcon,
-  Radio,
   ActivitySquare,
   MapPin,
-  MessagesSquare,
-  Wrench,
-  Zap,
   X,
 } from "lucide-react";
 
@@ -61,22 +57,22 @@ type DeviceEvent = {
   created_at: string;
   device_id?: string;
   sentinel_id?: string | null;
-  hw_uid?: string | null;          // included if you select it
-  device_token?: string | null;    // included if you select it
+  hw_uid?: string | null;
+  device_token?: string | null;
   event_type: string;
-  payload: any;                    // JSON object
+  payload: any;
 };
 
 type PublicEvent = {
   id: string | number;
   created_at: string;
-  device_id: string;               // TEXT in your public.events
+  device_id: string; // TEXT in your public.events
   type: string;
   message: string | null;
   extras: any;
 };
 
-// Helps us keep names in one place
+// Table names
 const DEVICE_EVENTS_TABLE = "device_events";
 const PUBLIC_EVENTS_TABLE = "events";
 
@@ -118,7 +114,6 @@ export default function WardenDashboard() {
   const [events, setEvents] = useState<DeviceEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsFilter, setEventsFilter] = useState<string>("");
-  const [selectedPhone, setSelectedPhone] = useState<string>("");
 
   // Pairing watchers and device focus
   const [pairedDeviceId, setPairedDeviceId] = useState<string | null>(null);
@@ -142,8 +137,6 @@ export default function WardenDashboard() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       setSentinels(data ?? []);
-      const firstWithPhone = (data ?? []).find((s) => s.phone);
-      if (firstWithPhone?.phone) setSelectedPhone(firstWithPhone.phone);
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load sentinels.");
     } finally {
@@ -415,7 +408,6 @@ export default function WardenDashboard() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: DEVICE_EVENTS_TABLE },
         (payload: any) => {
-          // if focused on a device, ignore global stream
           if (pairedDeviceId && payload.new?.device_id !== pairedDeviceId) return;
           setEvents((prev) => [payload.new as DeviceEvent, ...prev].slice(0, 500));
         }
@@ -459,26 +451,6 @@ export default function WardenDashboard() {
       );
     });
   }, [events, eventsFilter]);
-
-  // -------- Quick SMS helpers --------
-  const smsHref = (to: string, body: string) => {
-    const encoded = encodeURIComponent(body);
-    return `sms:${to}?&body=${encoded}`;
-  };
-  const copyText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setSuccessMsg("Copied to clipboard.");
-    } catch {
-      setErrorMsg("Unable to copy. Please copy manually.");
-    }
-  };
-
-  // Commands (must match firmware)
-  const cmdOTW = "OTW";
-  const cmdAgps60 = "AGPS 60";
-  const cmdAgpsOff = "AGPS OFF";
-  const cmdUnpair = "UNPAIR";
 
   return (
     <>
@@ -531,7 +503,9 @@ export default function WardenDashboard() {
               <h1 className="text-xl font-semibold tracking-tight">
                 Your Sentinels
                 {pairedDeviceId ? (
-                  <span className="ml-3 text-sm text-gray-500">• Focused on device <span className="font-mono">{pairedDeviceId.slice(0,8)}…</span></span>
+                  <span className="ml-3 text-sm text-gray-500">
+                    • Focused on device <span className="font-mono">{pairedDeviceId.slice(0,8)}…</span>
+                  </span>
                 ) : (
                   <span className="ml-3 text-sm text-gray-500">• Showing all device events</span>
                 )}
@@ -557,7 +531,9 @@ export default function WardenDashboard() {
           {!loading && filtered.length === 0 ? (
             <Card className="border-emerald-200 bg-white/90">
               <CardHeader><CardTitle>No Sentinels yet</CardTitle></CardHeader>
-              <CardContent className="text-gray-600">Add your first Sentinel to start managing their safety profile.</CardContent>
+              <CardContent className="text-gray-600">
+                Add your first Sentinel to start managing their safety profile.
+              </CardContent>
             </Card>
           ) : loading ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -581,9 +557,6 @@ export default function WardenDashboard() {
                         <DropdownMenuItem onClick={() => openPairFor(s)}>
                           <LinkIcon className="h-4 w-4 mr-2" /> Pair device
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { if (s.phone) setSelectedPhone(s.phone); }}>
-                          <Phone className="h-4 w-4 mr-2" /> Use this phone for quick SMS
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openEditFor(s)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </DropdownMenuItem>
@@ -602,47 +575,9 @@ export default function WardenDashboard() {
             </div>
           )}
 
-          {/* Actions + Live Events */}
-          <div className="grid gap-4 md:grid-cols-3 mt-6">
-            {/* Quick SMS */}
-            <Card className="border-emerald-200 bg-white/90 md:col-span-1">
-              <CardHeader><CardTitle className="flex items-center gap-2"><MessagesSquare className="h-5 w-5 text-emerald-700" /> Quick SMS Actions</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="space-y-1">
-                  <Label>Send to phone</Label>
-                  <Input value={selectedPhone} onChange={(e) => setSelectedPhone(e.target.value)} placeholder="+63 9XX XXX XXXX" className="bg-white/80" />
-                  <p className="text-xs text-gray-500">Your device listens for SMS commands from the guardian phone.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button asChild className="bg-emerald-600 hover:bg-emerald-700" disabled={!selectedPhone} title="Open SMS app with 'OTW'">
-                    <a href={selectedPhone ? smsHref(selectedPhone, "OTW") : "#"}><Radio className="h-4 w-4 mr-2" /> OTW</a>
-                  </Button>
-                  <Button variant="outline" onClick={() => copyText("OTW")} disabled={!selectedPhone}><CopyIcon className="h-4 w-4 mr-2" /> Copy OTW</Button>
-
-                  <Button asChild className="bg-teal-600 hover:bg-teal-700" disabled={!selectedPhone} title="Open SMS app with 'AGPS 60'">
-                    <a href={selectedPhone ? smsHref(selectedPhone, "AGPS 60") : "#"}><Zap className="h-4 w-4 mr-2" /> A-GPS 60s</a>
-                  </Button>
-                  <Button variant="outline" onClick={() => copyText("AGPS 60")} disabled={!selectedPhone}><CopyIcon className="h-4 w-4 mr-2" /> Copy A-GPS 60</Button>
-
-                  <Button asChild className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!selectedPhone} title="Open SMS app with 'AGPS OFF'">
-                    <a href={selectedPhone ? smsHref(selectedPhone, "AGPS OFF") : "#"}><Wrench className="h-4 w-4 mr-2" /> A-GPS OFF</a>
-                  </Button>
-                  <Button variant="outline" onClick={() => copyText("AGPS OFF")} disabled={!selectedPhone}><CopyIcon className="h-4 w-4 mr-2" /> Copy A-GPS OFF</Button>
-
-                  <Button asChild className="bg-red-600 hover:bg-red-700" disabled={!selectedPhone} title="Open SMS app with 'UNPAIR'">
-                    <a href={selectedPhone ? smsHref(selectedPhone, "UNPAIR") : "#"}><Trash2 className="h-4 w-4 mr-2" /> UNPAIR</a>
-                  </Button>
-                  <Button variant="outline" onClick={() => copyText("UNPAIR")} disabled={!selectedPhone}><CopyIcon className="h-4 w-4 mr-2" /> Copy UNPAIR</Button>
-                </div>
-
-                <p className="text-xs text-gray-500 pt-1">
-                  Tip: On desktop, the <code>sms:</code> links may not open. Use the copy buttons instead and send from your phone.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Live Events */}
-            <Card className="border-emerald-200 bg-white/90 md:col-span-2">
+          {/* Live Events only (no Quick SMS panel) */}
+          <div className="mt-6">
+            <Card className="border-emerald-200 bg-white/90">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ActivitySquare className="h-5 w-5 text-emerald-700" />
@@ -712,10 +647,7 @@ export default function WardenDashboard() {
                           : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
                       return (
-                        <div
-                          key={String(e.id)}
-                          className="rounded-md border p-3 bg-white/80 text-sm"
-                        >
+                        <div key={String(e.id)} className="rounded-md border p-3 bg-white/80 text-sm">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className={`px-2 py-0.5 rounded border text-xs ${color}`}>
