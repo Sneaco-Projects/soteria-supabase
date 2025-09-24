@@ -1,13 +1,22 @@
 // /app/dashboard/layout.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Heart, Home, Users, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
+  const router = useRouter();
+
+  // If someone hits /dashboard directly, send them to the homepage
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.pathname === "/dashboard") {
+      router.replace("/");
+    }
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
@@ -38,7 +47,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="mt-2 px-1">
-          <SideLink href="/dashboard" icon={<Home className="w-4 h-4" />} open={open} label="Overview" />
+          {/* Overview now goes to the homepage */}
+          <SideLink href="/" icon={<Home className="w-4 h-4" />} open={open} label="Overview" />
           <SideLink href="/dashboard/warden" icon={<Users className="w-4 h-4" />} open={open} label="Warden" />
         </nav>
       </aside>
