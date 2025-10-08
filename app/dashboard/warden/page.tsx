@@ -223,19 +223,18 @@ export default function WardenDashboard() {
   };
 
   // recent activity for green dots: fetch devices joined to these sentinels
-const loadDeviceActivity = async () => {
-  if (!sentinels.length) { setDevices({}); return; }
-  const { data, error } = await supabase
-    .from("devices")
-    .select("id, sentinel_id, last_seen_at")
-    .in("sentinel_id", sentinels.map(s => s.id));
-  if (!error && data) {
-    const map: Record<string, DeviceRow> = {};
-    for (const d of data as any[]) map[d.id] = d as DeviceRow;
-    setDevices(map);
-  }
-};
-
+  const loadDeviceActivity = async () => {
+    if (!sentinels.length) { setDevices({}); return; }
+    const { data, error } = await supabase
+      .from("devices")
+      .select("id, sentinel_id, last_seen_at")
+      .in("sentinel_id", sentinels.map(s => s.id));
+    if (!error && data) {
+      const map: Record<string, DeviceRow> = {};
+      for (const d of data as any[]) map[d.id] = d as DeviceRow;
+      setDevices(map);
+    }
+  };
 
   useEffect(() => {
     loadSentinels();
@@ -366,9 +365,9 @@ const loadDeviceActivity = async () => {
         (payload: any) => {
           const p = payload?.new?.payload || {};
           if (p?.code === code) {
-            const devId = payload.new.device_id as string;
+            const devId = String(payload.new.device_id);
             setPairedDeviceId(devId);
-            setSuccessMsg("Paired successfully"); // toast-ish
+            setSuccessMsg("Paired successfully");
             setOpenPair(false);
             loadEventsForDevice(devId);
             startDeviceStream(devId);
@@ -759,7 +758,7 @@ const loadDeviceActivity = async () => {
         </div>
       </div>
 
-      {/* Add / Edit / Delete / Pair modals — unchanged except minor copies */}
+      {/* Add / Edit / Delete / Pair modals */}
       <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
         <AlertDialogContent className="sm:max-w-[520px]">
           <AlertDialogHeader>
