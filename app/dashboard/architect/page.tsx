@@ -25,6 +25,22 @@ type DeviceOverview = { device_id: string; hw_uid: string; model: string | null;
 export default function ArchitectDashboard() {
   const router = useRouter();
 
+  // ----- CLIENT GUARD (static-export friendly) -----
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/login"); return; }
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (prof?.role !== "architect") {
+        router.replace(`/dashboard/${prof?.role ?? "warden"}`);
+      }
+    })();
+  }, [router]);
+
   // modals
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -91,7 +107,10 @@ export default function ArchitectDashboard() {
   };
 
   const loadDevices = async () => {
-    const { data, error } = await supabase.from("v_architect_device_overview").select("*").order("last_seen_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("v_architect_device_overview")
+      .select("*")
+      .order("last_seen_at", { ascending: false });
     if (error) throw error;
     setDevices(data ?? []);
   };
@@ -241,9 +260,9 @@ export default function ArchitectDashboard() {
               <TabsTrigger value="devices">Devices</TabsTrigger>
             </TabsList>
 
-            {/* Providers tab — your original content stays here */}
+            {/* Providers tab – keep your existing content here */}
 
-            {/* Assignments tab — your original content stays here */}
+            {/* Assignments tab – keep your existing content here */}
 
             {/* Devices tab */}
             <TabsContent value="devices">

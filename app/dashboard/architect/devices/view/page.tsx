@@ -1,6 +1,4 @@
-"use client";  // MUST be the first line
-
-export const dynamic = "force-dynamic";
+"use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +11,17 @@ export default function DeviceDetails() {
   const sp = useSearchParams();
   const router = useRouter();
   const id = sp.get("id");
+
+  // (Optional) client guard so wardens/providers don't hang out on this page
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/login"); return; }
+      const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (prof?.role !== "architect") router.replace(`/dashboard/${prof?.role ?? "warden"}`);
+    })();
+  }, [router]);
+
   const [events, setEvents] = useState<DeviceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
