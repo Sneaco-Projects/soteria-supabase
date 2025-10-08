@@ -1,13 +1,14 @@
-// lib/supabase-browser.ts
 import { createClient } from '@supabase/supabase-js';
 
-export const supabase = createClient(
+export const supabaseBrowser = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
     auth: {
-      persistSession: true,           // keeps the user logged in
+      // optional but nice in SPA: persist session in localStorage
+      persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
   }
 );
