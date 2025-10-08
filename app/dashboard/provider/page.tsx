@@ -128,55 +128,61 @@ export default function ProviderDashboard() {
   };
 
   // ---------- Events ----------
-  const loadEvents = async (sentinelIds?: string[], deviceId?: string) => {
-    setEventsLoading(true);
-    try {
-      let query = supabase
-        .from("device_events")
-        .select("id, created_at, event_type, payload, device_id, sentinel_id")
-        .order("created_at", { ascending: false });
+const loadEvents = async (sentinelIds?: string[], deviceId?: string) => {
+  setEventsLoading(true);
+  try {
+    // use the view so GPS_SEARCH is already excluded
+    let query = supabase
+      .from("v_device_event_feed")
+      .select("id, created_at, event_type, payload, device_id, sentinel_id")
+      .order("created_at", { ascending: false });
 
-      if (deviceId) {
-        query = query.eq("device_id", deviceId).limit(500);
-      } else if (sentinelIds && sentinelIds.length) {
-        query = query.in("sentinel_id", sentinelIds).limit(400);
-      } else {
-        query = query.limit(200);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setEvents((data ?? []) as DeviceEvent[]);
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to load events.");
-    } finally {
-      setEventsLoading(false);
+    if (deviceId) {
+      query = query.eq("device_id", deviceId).limit(500);
+    } else if (sentinelIds && sentinelIds.length) {
+      query = query.in("sentinel_id", sentinelIds).limit(400);
+    } else {
+      query = query.limit(200);
     }
-  };
 
-  const startStream = (deviceId?: string) => {
-    if (deviceChannelRef.current) supabase.removeChannel(deviceChannelRef.current);
-    deviceChannelRef.current = supabase
-      .channel(`provider-events-${deviceId ?? "all"}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "device_events",
-          ...(deviceId ? { filter: `device_id=eq.${deviceId}` } : {}),
-        },
-        (payload: any) => {
-          // If not device-focused, accept only events for my assigned sentinels
-          if (!deviceId && sentinels.length) {
-            const allowed = new Set(sentinels.map(s => s.id));
-            if (payload.new?.sentinel_id && !allowed.has(payload.new.sentinel_id)) return;
-          }
-          setEvents(prev => [payload.new as DeviceEvent, ...prev].slice(0, 600));
+    const { data, error } = await query;
+    if (error) throw error;
+    setEvents((data ?? []) as DeviceEvent[]);
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? "Failed to load events.");
+  } finally {
+    setEventsLoading(false);
+  }
+};
+
+const startStream = (deviceId?: string) => {
+  if (deviceChannelRef.current) supabase.removeChannel(deviceChannelRef.current);
+  deviceChannelRef.current = supabase
+    .channel(`provider-events-${deviceId ?? "all"}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "device_events",
+        ...(deviceId ? { filter: `device_id=eq.${deviceId}` } : {}),
+      },
+      (payload: any) => {
+        const e = payload.new as DeviceEvent;
+
+        // Drop GPS_SEARCH noise
+        if (e.event_type === "GPS_SEARCH") return;
+
+        // If not device-focused, accept only events for my assigned sentinels
+        if (!deviceId && sentinels.length) {
+          const allowed = new Set(sentinels.map(s => s.id));
+          if (e.sentinel_id && !allowed.has(e.sentinel_id)) return;
         }
-      )
-      .subscribe();
-  };
+        setEvents(prev => [e, ...prev].slice(0, 600));
+      }
+    )
+    .subscribe();
+};
 
   // Derived maps
   const devicesBySentinel = useMemo(() => {

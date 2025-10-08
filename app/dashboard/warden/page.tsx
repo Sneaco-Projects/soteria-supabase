@@ -223,18 +223,19 @@ export default function WardenDashboard() {
   };
 
   // recent activity for green dots: fetch devices joined to these sentinels
-  const loadDeviceActivity = async () => {
-    // grab device_id, sentinel_id, last_seen_at (pairing & activity)
-    const { data, error } = await supabase
-      .from("devices")
-      .select("id, sentinel_id, last_seen_at")
-      .in("sentinel_id", sentinels.map(s => s.id));
-    if (!error && data) {
-      const map: Record<string, DeviceRow> = {};
-      for (const d of data as any[]) map[d.id] = d as DeviceRow;
-      setDevices(map);
-    }
-  };
+const loadDeviceActivity = async () => {
+  if (!sentinels.length) { setDevices({}); return; }
+  const { data, error } = await supabase
+    .from("devices")
+    .select("id, sentinel_id, last_seen_at")
+    .in("sentinel_id", sentinels.map(s => s.id));
+  if (!error && data) {
+    const map: Record<string, DeviceRow> = {};
+    for (const d of data as any[]) map[d.id] = d as DeviceRow;
+    setDevices(map);
+  }
+};
+
 
   useEffect(() => {
     loadSentinels();
