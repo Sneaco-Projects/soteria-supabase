@@ -241,11 +241,9 @@ export default function ArchitectDashboard() {
               <TabsTrigger value="devices">Devices</TabsTrigger>
             </TabsList>
 
-            {/* Providers tab */}
-            {/* (unchanged, your code stays) */}
+            {/* Providers tab — your original content stays here */}
 
-            {/* Assignments tab */}
-            {/* (unchanged, your code stays) */}
+            {/* Assignments tab — your original content stays here */}
 
             {/* Devices tab */}
             <TabsContent value="devices">
@@ -266,7 +264,10 @@ export default function ArchitectDashboard() {
                             Sentinel: {d.sentinel_name ?? "—"} • Last seen: {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : "—"} • Last event: {d.latest_event_type ?? "—"}
                           </div>
                         </div>
-                        <Button variant="outline" onClick={() => router.push(`/dashboard/architect/devices/${d.device_id}`)}>
+                        <Button
+                          variant="outline"
+                          onClick={() => router.push(`/dashboard/architect/devices/view?id=${d.device_id}`)}
+                        >
                           View details
                         </Button>
                       </CardContent>
