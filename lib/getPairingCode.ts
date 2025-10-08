@@ -1,8 +1,8 @@
 // lib/getPairingCode.ts
-import { supabase }from '@/lib/supabase-browser';
+import { supabaseBrowser } from '@/lib/supabase-browser';
 
 export async function getPairingCode(sentinel_id: string, hw_uid?: string) {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseBrowser.auth.getSession();
   const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-claim`, {
     method: 'POST',
     headers: {

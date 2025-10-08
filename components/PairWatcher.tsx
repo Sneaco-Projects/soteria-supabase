@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { supabase } from '@/lib/supabase-browser';
+import { supabaseBrowser } from '@/lib/supabase-browser';
 
 type Props = {
   sentinelId: string;
@@ -13,7 +13,7 @@ export default function PairWatcher({ sentinelId, expectedCode, onPaired }: Prop
   useEffect(() => {
     if (!sentinelId || !expectedCode) return;
 
-    const channel = supabase
+    const channel = supabaseBrowser
       .channel('pairing-watch')
       .on(
         'postgres_changes',
@@ -33,7 +33,7 @@ export default function PairWatcher({ sentinelId, expectedCode, onPaired }: Prop
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabaseBrowser.removeChannel(channel);
     };
   }, [sentinelId, expectedCode, onPaired]);
 
