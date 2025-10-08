@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+
+
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
