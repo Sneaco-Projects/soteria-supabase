@@ -1,19 +1,46 @@
-'use client';
+'use server';
 
-import { supabase } from '@/lib/supabase-browser';
+import { cookies } from 'next/headers';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-type ClaimResponse = { code: string; expires_at: string };
+export async function createPairingCode(sentinelId: string, hw_uid?: string) {
+  // Cast to any to allow set/remove in Server Actions (runtime is fine)
+  const cookieStore = cookies() as any;
 
-export async function createPairingCode(sentinel_id: string, hw_uid?: string) {
-  const { data, error } = await supabase.functions.invoke<ClaimResponse>('create-claim', {
-    body: { sentinel_id, hw_uid: hw_uid ?? null },
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value as string | undefined;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          cookieStore.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
+
+  const { data: { session }, error: sErr } = await supabase.auth.getSession();
+  if (sErr) throw new Error(`Auth error: ${sErr.message}`);
+  if (!session) throw new Error('Not signed in');
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-claim`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ sentinel_id: sentinelId, hw_uid }),
+    cache: 'no-store',
   });
-  if (error) {
-    // TEMP: surface status/body in console if it fails
-    const status = error?.context?.response?.status;
-    const body = error?.context?.response?.text;
-    console.error('create-claim failed', { status, body, message: error.message });
-    throw new Error(body ?? error.message);
-  }
-  return data!;
+
+  const text = await res.text();
+  if (!res.ok) throw new Error(`(${res.status}) ${text}`);
+  return JSON.parse(text) as { code: string; expires_at: string };
 }

@@ -11,7 +11,7 @@ export default function GenerateCodeButton({ sentinelId }: { sentinelId: string 
       setLoading(true);
       const data = await createPairingCode(sentinelId);
       setRes(data);
-    } catch (e:any) {
+    } catch (e: any) {
       alert(e.message ?? String(e));
     } finally {
       setLoading(false);
@@ -24,7 +24,7 @@ export default function GenerateCodeButton({ sentinelId }: { sentinelId: string 
         {loading ? 'Generating…' : 'Generate Code'}
       </button>
       {res && (
-        <div style={{marginTop: 8}}>
+        <div style={{ marginTop: 8 }}>
           <div>Code: <b>{res.code}</b></div>
           <div>Expires: {new Date(res.expires_at).toLocaleString()}</div>
         </div>
