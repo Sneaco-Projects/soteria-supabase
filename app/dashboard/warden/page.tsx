@@ -398,7 +398,7 @@ export default function WardenDashboard() {
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load sentinels.");
     } finally {
-      setLoading(false);
+           setLoading(false);
     }
   };
 
@@ -521,7 +521,7 @@ export default function WardenDashboard() {
     setPairCode(null); setPairExpires(null); setPairUsedAt(null); setPairedDeviceId(null);
   };
 
-  // New: allow explicit params so we can call right after Add Sentinel
+  // UPDATED: handles { ok, error_code, message } from the Edge Function
   const requestPairCode = async (forSentinelId?: string, forHwUid?: string) => {
     const sentinelId = forSentinelId ?? pairSentinelId;
     const hwUid = (forHwUid ?? pairHwUid).trim();
@@ -534,33 +534,57 @@ export default function WardenDashboard() {
       if (!session) throw new Error("Not signed in.");
 
       const { data, error } = await supabase.functions.invoke("create-claim", {
-        body: { sentinel_id: sentinelId, hw_uid: hwUid }, // required now
+        body: { sentinel_id: sentinelId, hw_uid: hwUid },
         headers: {
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
-      if (error) throw new Error(error.message || "Failed to create pairing code.");
+      if (error) {
+        throw new Error(error.message || "Failed to create pairing code.");
+      }
 
-      const code = (data as any).code as string;
-      const expires_at = (data as any).expires_at as string;
+      const payload = data as any;
+      if (!payload?.ok) {
+        const code = payload?.error_code as string | undefined;
+        switch (code) {
+          case "no_such_device_available":
+            setErrorMsg("No such device is available. Ask your architect to add this HW UID and mark it Available.");
+            break;
+          case "device_not_available":
+            setErrorMsg("That device exists but is not marked Available.");
+            break;
+          case "device_already_assigned":
+            setErrorMsg("That device is already assigned to a sentinel.");
+            break;
+          case "active_claim_locked_to_different_hw":
+            setErrorMsg("Active pairing code is locked to a different device (HW UID mismatch).");
+            break;
+          case "sentinel_not_owned":
+            setErrorMsg("You don't own that sentinel.");
+            break;
+          case "missing_hw_uid":
+            setErrorMsg("Please enter a device HW UID.");
+            break;
+          default:
+            setErrorMsg(payload?.message ?? "Failed to create pairing code.");
+        }
+        return;
+      }
+
+      // Success
+      const code = payload.code as string;
+      const expires_at = payload.expires_at as string;
 
       setPairSentinelId(sentinelId);
       setPairHwUid(hwUid);
-      setPairCode(code); setPairExpires(expires_at);
+      setPairCode(code);
+      setPairExpires(expires_at);
       setSuccessMsg("Pairing code generated.");
       startPairWatchers(code);
     } catch (e: any) {
-      const msg = String(e?.message ?? "Failed to create pairing code.");
-      // Surface friendly messages from the edge function
-      if (msg.includes("no_such_device_available")) {
-        setErrorMsg("No such device is available. Ask your architect to add this HW UID and set it as Available.");
-      } else if (msg.includes("device_not_available")) {
-        setErrorMsg("That device exists but is not available. Ask your architect to mark it Available.");
-      } else {
-        setErrorMsg(msg);
-      }
+      setErrorMsg(e?.message ?? "Failed to create pairing code.");
     } finally {
       setPairLoading(false);
     }
