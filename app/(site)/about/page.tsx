@@ -164,64 +164,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Where (navigation) */}
-      <section className="container mx-auto px-4 pb-12">
-        <div className="mb-6">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Where do I find things?</h2>
-          <p className="mt-2 text-gray-600 max-w-2xl">
-            Common places you’ll use every day.
-          </p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="bg-white/90 border-emerald-200">
-            <CardHeader>
-              <CardTitle className="text-gray-900">Dashboards</CardTitle>
-              <CardDescription className="text-gray-600">
-                Jump straight into your role’s workspace.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Link href="/dashboard/architect">
-                <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                  Architect Dashboard
-                </Button>
-              </Link>
-              <Link href="/dashboard/warden">
-                <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                  Warden Dashboard
-                </Button>
-              </Link>
-              <Link href="/dashboard/provider">
-                <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                  Provider Dashboard
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/90 border-emerald-200">
-            <CardHeader>
-              <CardTitle className="text-gray-900">Help &amp; Support</CardTitle>
-              <CardDescription className="text-gray-600">
-                Get answers or contact us quickly.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Link href="/faq">
-                <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                  FAQs
-                </Button>
-              </Link>
-              <Link href="/contact">
-                <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 hover:from-emerald-600 hover:to-teal-600">
-                  Contact Support
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
 
       {/* When (alerts & events) */}
       <section className="container mx-auto px-4 pb-12">
@@ -388,32 +330,6 @@ export default function AboutPage() {
             </CardContent>
           </Card>
         </div>
-      </section>
-
-      {/* CTA */}
-      <section className="container mx-auto px-4 pb-24">
-        <Card className="bg-white/90 border-emerald-200">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl md:text-3xl text-gray-900">
-              Ready to protect someone today?
-            </CardTitle>
-            <CardDescription className="text-gray-600">
-              Add a device, create a sentinel, and start receiving live alerts.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center gap-3">
-            <Link href="/dashboard/architect">
-              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 hover:from-emerald-600 hover:to-teal-600">
-                Architect: Add Device
-              </Button>
-            </Link>
-            <Link href="/dashboard/warden">
-              <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                Warden: Add &amp; Pair
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
       </section>
     </div>
   );
