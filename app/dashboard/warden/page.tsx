@@ -99,23 +99,25 @@ function categorize(e: DeviceEvent): LogCategory {
       return "All";
   }
 }
+
 function prettyLabel(e: DeviceEvent): string {
   const p = e.payload || {};
   switch (e.event_type) {
-    case "PAIR_OK": return "Paired successfully";
-    case "PAIR_FAIL": return "Pair failed";
-    case "UNPAIR_OK": return "Unpaired by guardian";
-    case "UNPAIR_DENY": return "Unpair denied";
-    case "BTN_SHORT": return "Button pressed (short)";
-    case "SOS": return "SOS sent";
-    case "OTW": return "On the way";
-    case "IN_SMS": return `Incoming SMS${p?.message ? `: “${String(p.message)}”` : ""}`;
-    case "AGPS_BOOST": return "A-GPS boosting…";
-    case "AGPS_STOP": return "A-GPS detached";
-    case "HEALTH": return `Health ${p?.message ?? ""}`.trim();
+    case "PAIR_OK": return "✅ Paired successfully";
+    case "PAIR_FAIL": return "❌ Pair failed";
+    case "UNPAIR_OK": return "🔓 Unpaired by guardian";
+    case "UNPAIR_DENY": return "⛔ Unpair denied";
+    case "BTN_SHORT": return "🔔 Button pressed (short)";
+    case "SOS": return "🚨 SOS sent";
+    case "OTW": return "🚗 On the way";
+    case "IN_SMS": return `💬 Incoming SMS${p?.message ? `: "${String(p.message)}"` : ""}`;
+    case "AGPS_BOOST": return "📡 A-GPS boosting…";
+    case "AGPS_STOP": return "📡 A-GPS detached";
+    case "HEALTH": return `💊 Health ${p?.message ?? ""}`.trim();
     default: return e.event_type;
   }
 }
+
 function EventBadge({ e }: { e: DeviceEvent }) {
   let Icon = Info;
   let color = "text-zinc-700 bg-zinc-100 border-zinc-200";
