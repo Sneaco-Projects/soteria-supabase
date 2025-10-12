@@ -73,6 +73,9 @@ export default function ArchitectDashboard() {
 
   // Devices tab
   const [devices, setDevices] = useState<DeviceOverview[]>([]);
+  const [openAddDevice, setOpenAddDevice] = useState(false);
+  const [newDeviceHwUid, setNewDeviceHwUid] = useState("");
+  const [newDeviceModel, setNewDeviceModel] = useState("");
 
   // Load data
   const loadProviders = async () => {
@@ -222,6 +225,43 @@ export default function ArchitectDashboard() {
     }
   };
 
+  const addDevice = async () => {
+    try {
+      const hwUid = newDeviceHwUid.trim();
+      if (!hwUid) throw new Error("Please enter a device ID (HW UID).");
+
+      // Check if device already exists
+      const { data: existing, error: checkError } = await supabase
+        .from("devices")
+        .select("hw_uid")
+        .eq("hw_uid", hwUid)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existing) throw new Error("A device with this ID already exists.");
+
+      // Insert new device
+      const { error } = await supabase
+        .from("devices")
+        .insert({
+          hw_uid: hwUid,
+          model: newDeviceModel.trim() || null,
+          // sentinel_id stays null (unpaired)
+          // device_token stays null (set during pairing)
+        });
+
+      if (error) throw error;
+
+      setSuccessMsg("Device added successfully. It's now available for pairing by Wardens.");
+      setOpenAddDevice(false);
+      setNewDeviceHwUid("");
+      setNewDeviceModel("");
+      await loadDevices();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to add device.");
+    }
+  };
+
   const bySentinel = useMemo(() => {
     const map: Record<string, string[]> = {};
     assignments.forEach(a => { map[a.sentinel_id] ??= []; map[a.sentinel_id].push(a.provider_id); });
@@ -277,8 +317,15 @@ export default function ArchitectDashboard() {
             <TabsContent value="devices">
               <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-lg">
                 <CardHeader>
-                  <CardTitle>All Devices</CardTitle>
-                  <CardDescription>Architect can view every device and open detailed logs.</CardDescription>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>All Devices</CardTitle>
+                      <CardDescription>Architect can view every device and open detailed logs.</CardDescription>
+                    </div>
+                    <Button onClick={() => setOpenAddDevice(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                      Add Device
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {devices.map((d) => (
@@ -312,6 +359,66 @@ export default function ArchitectDashboard() {
           </Tabs>
         </div>
       </div>
+
+      {/* Add Device Modal */}
+      <AlertDialog open={openAddDevice} onOpenChange={setOpenAddDevice}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add New Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Add a device to the system so Wardens can pair it with sentinels.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="hw-uid">Device ID (HW UID) *</Label>
+              <Input
+                id="hw-uid"
+                value={newDeviceHwUid}
+                onChange={(e) => setNewDeviceHwUid(e.target.value)}
+                placeholder="Enter device ID/IMEI..."
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This should match the device's hardware identifier (IMEI, MAC address, etc.)
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="model">Model (Optional)</Label>
+              <Input
+                id="model"
+                value={newDeviceModel}
+                onChange={(e) => setNewDeviceModel(e.target.value)}
+                placeholder="e.g., ESP32+WiFi+A7670"
+                className="mt-1"
+              />
+            </div>
+
+            {errorMsg && (
+              <div className="text-red-500 text-sm">{errorMsg}</div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpenAddDevice(false);
+                setNewDeviceHwUid("");
+                setNewDeviceModel("");
+                setErrorMsg("");
+              }}
+            >
+              Cancel
+            </Button>
+            <AlertDialogAction onClick={addDevice}>
+              Add Device
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

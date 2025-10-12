@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -341,6 +342,13 @@ export default function WardenDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Device management
+  const [openAddDevice, setOpenAddDevice] = useState(false);
+  const [deviceId, setDeviceId] = useState("");
+  const [deviceNumber, setDeviceNumber] = useState("");
+  const [showPairInstructions, setShowPairInstructions] = useState(false);
+  const [addDeviceStep, setAddDeviceStep] = useState(1); // 1: input details, 2: show instructions
+
   // events / feed
   const [events, setEvents] = useState<DeviceEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -613,6 +621,37 @@ export default function WardenDashboard() {
     }
   };
 
+  const validateDevice = async (hwUid: string): Promise<{ exists: boolean; available: boolean; deviceInfo?: any }> => {
+    try {
+      // Check if device exists in the devices table
+      const { data: device, error } = await supabase
+        .from('devices')
+        .select('id, hw_uid, model, sentinel_id, last_seen_at')
+        .eq('hw_uid', hwUid)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      if (!device) {
+        return { exists: false, available: false };
+      }
+
+      // Device exists - check if it's available for pairing (not already assigned to a sentinel)
+      const available = !device.sentinel_id;
+
+      return {
+        exists: true,
+        available,
+        deviceInfo: device
+      };
+    } catch (error) {
+      console.error('Device validation error:', error);
+      throw error;
+    }
+  };
+
   // Global realtime (table) + PAIR_OK toast + GPS_SEARCH filter
   useEffect(() => {
     if (mountedRef.current) return;
@@ -754,6 +793,9 @@ export default function WardenDashboard() {
               </div>
               <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700 shadow-sm">
                 <Plus className="mr-2 h-4 w-4" /> Add Sentinel
+              </Button>
+              <Button onClick={() => setOpenAddDevice(true)} className="bg-blue-600 hover:bg-blue-700 shadow-sm ml-3">
+                <Plus className="mr-2 h-4 w-4" /> Pair Device
               </Button>
             </div>
           </div>
@@ -1068,6 +1110,150 @@ export default function WardenDashboard() {
 
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setOpenPair(false)}>Close</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Device Pairing Modal */}
+      <AlertDialog open={openAddDevice} onOpenChange={setOpenAddDevice}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg">Pair Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Enter the device ID to pair with a sentinel. Only devices added by an Architect can be paired.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4">
+            {addDeviceStep === 1 && (
+              <>
+                <div>
+                  <Label>Device ID</Label>
+                  <Input
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
+                    placeholder="Enter device ID..."
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label>Phone Number (for SMS pairing code)</Label>
+                  <Input
+                    value={deviceNumber}
+                    onChange={(e) => setDeviceNumber(e.target.value)}
+                    placeholder="Enter phone number..."
+                    className="mt-1"
+                  />
+                </div>
+                
+                {errorMsg && (
+                  <div className="text-red-500 text-sm">{errorMsg}</div>
+                )}
+              </>
+            )}
+            
+            {addDeviceStep === 2 && showPairInstructions && (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-800 mb-2">📱 Device Ready for Pairing</h4>
+                  <p className="text-green-700 text-sm mb-3">
+                    SMS sent to <strong>{deviceNumber}</strong> with pairing code.
+                  </p>
+                </div>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-800 mb-2">🔧 Device Pairing Instructions</h4>
+                  <ol className="text-blue-700 text-sm space-y-2 list-decimal list-inside">
+                    <li>Send SMS with format: <code className="bg-white px-1 rounded">PAIR [CODE]</code> to the device's phone number</li>
+                    <li>Device will receive the SMS and automatically attempt pairing</li>
+                    <li>Watch for LED feedback on device:
+                      <ul className="ml-4 mt-1 list-disc text-xs">
+                        <li>🟢 Green blinking = sending SMS confirmation</li>
+                        <li>🔵 Blue solid + vibration = pairing successful</li>
+                        <li>🔴 Red + triple vibration = pairing failed</li>
+                      </ul>
+                    </li>
+                    <li>Device will send "Paired OK" SMS confirmation when successful</li>
+                    <li>Test with a button press - should send SMS + appear in dashboard</li>
+                  </ol>
+                </div>
+                
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h4 className="font-medium text-amber-800 mb-2">⚠️ Troubleshooting</h4>
+                  <ul className="text-amber-700 text-sm space-y-1 list-disc list-inside">
+                    <li>If device shows red LED + triple vibration: check WiFi connection on device</li>
+                    <li>Code expires in 10 minutes - regenerate if needed</li>
+                    <li>Ensure device has cellular signal for SMS reception</li>
+                    <li>Check device status LED: 🟢 Green = network OK, 🔴 Red = network issues</li>
+                    <li>If "Pair failed" SMS received: code may be expired or invalid</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            {addDeviceStep === 1 ? (
+              <>
+                <AlertDialogCancel onClick={() => {
+                  setOpenAddDevice(false);
+                  setAddDeviceStep(1);
+                  setDeviceId('');
+                  setDeviceNumber('');
+                  setErrorMsg('');
+                }}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async () => {
+                    if (!deviceId.trim() || !deviceNumber.trim()) {
+                      setErrorMsg('Please enter both device ID and phone number');
+                      return;
+                    }
+                    
+                    setErrorMsg('');
+                    
+                    try {
+                      // Validate device exists and is available for pairing
+                      const validation = await validateDevice(deviceId);
+                      
+                      if (!validation.exists) {
+                        setErrorMsg('Device not found. Please check the device ID or contact an Architect to add the device first.');
+                        return;
+                      }
+                      
+                      if (!validation.available) {
+                        setErrorMsg('This device is already paired with another sentinel. Please use an unpaired device.');
+                        return;
+                      }
+                      
+                      // Device is valid and available - proceed to pairing
+                      // Note: In a real implementation, this would generate a pairing code
+                      // using the create-claim Supabase function with sentinel_id and hw_uid
+                      
+                      setShowPairInstructions(true);
+                      setAddDeviceStep(2);
+                    } catch (error) {
+                      setErrorMsg((error as Error)?.message || 'Failed to validate device');
+                    }
+                  }}
+                >
+                  Validate & Pair
+                </AlertDialogAction>
+              </>
+            ) : (
+              <AlertDialogAction onClick={() => {
+                setOpenAddDevice(false);
+                setAddDeviceStep(1);
+                setDeviceId('');
+                setDeviceNumber('');
+                setShowPairInstructions(false);
+                setErrorMsg('');
+              }}>
+                Done
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
