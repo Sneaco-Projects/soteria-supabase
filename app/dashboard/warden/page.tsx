@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -319,7 +318,8 @@ export default function WardenDashboard() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const addDisabled = !fullName.trim();
+  const [addHwUid, setAddHwUid] = useState(""); // REQUIRED: architect-provisioned device to pair with
+  const addDisabled = !fullName.trim() || !addHwUid.trim();
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -335,19 +335,12 @@ export default function WardenDashboard() {
   const [pairSentinelId, setPairSentinelId] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [pairExpires, setPairExpires] = useState<string | null>(null);
-  const [pairHwUid, setPairHwUid] = useState("");
+  const [pairHwUid, setPairHwUid] = useState(""); // REQUIRED
   const [pairLoading, setPairLoading] = useState(false);
 
   // feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  // Device management
-  const [openAddDevice, setOpenAddDevice] = useState(false);
-  const [deviceId, setDeviceId] = useState("");
-  const [deviceNumber, setDeviceNumber] = useState("");
-  const [showPairInstructions, setShowPairInstructions] = useState(false);
-  const [addDeviceStep, setAddDeviceStep] = useState(1); // 1: input details, 2: show instructions
 
   // events / feed
   const [events, setEvents] = useState<DeviceEvent[]>([]);
@@ -438,31 +431,49 @@ export default function WardenDashboard() {
     );
   }, [sentinels, query]);
 
-  /* ----------------- Sentinel CRUD ----------------- */
+  /* ----------------- Sentinel CRUD (Add = Pair) ----------------- */
   const addSentinel = async () => {
     if (addDisabled) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in.");
-      const { error } = await supabase.from("sentinels").insert({
-        owner_guardian_id: user.id,
-        full_name: fullName.trim(),
-        phone: phone.trim() || null,
-        notes: notes.trim() || null,
-      });
+
+      // Insert and return the new sentinel id
+      const { data: ins, error } = await supabase
+        .from("sentinels")
+        .insert({
+          owner_guardian_id: user.id,
+          full_name: fullName.trim(),
+          phone: phone.trim() || null,
+          notes: notes.trim() || null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // Clear add form
       setOpenAdd(false);
       setFullName(""); setPhone(""); setNotes("");
-      setSuccessMsg("Sentinel added.");
-      await loadSentinels();
+
+      // Auto-open Pair modal with HW UID and generate claim
+      setPairSentinelId(ins.id);
+      setPairHwUid(addHwUid.trim());
+      setOpenPair(true);
+      setAddHwUid("");
+
+      // Generate code immediately (requires HW UID)
+      await requestPairCode(ins.id, addHwUid.trim());
     } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to add sentinel.");
+      const msg = String(e?.message ?? "Failed to add & pair sentinel.");
+      setErrorMsg(msg);
     }
   };
+
   const openEditFor = (s: Sentinel) => {
     setEditId(s.id); setEditName(s.full_name); setEditPhone(s.phone ?? ""); setEditNotes(s.notes ?? "");
     setOpenEdit(true);
   };
+
   const updateSentinel = async () => {
     if (!editId || !editName.trim()) { setErrorMsg(!editId ? "Nothing to update." : "Full name is required."); return; }
     try {
@@ -479,6 +490,7 @@ export default function WardenDashboard() {
       setErrorMsg(e?.message ?? "Failed to update sentinel.");
     }
   };
+
   const askDelete = (id: string) => { setDeleteId(id); setOpenDelete(true); };
   const deleteSentinel = async () => {
     if (!deleteId) return;
@@ -500,6 +512,7 @@ export default function WardenDashboard() {
     setPairHwUid(""); setPairUsedAt(null); setPairedDeviceId(null);
     setOpenPair(true);
   };
+
   const clearPairCode = () => {
     if (claimChannelRef.current) supabase.removeChannel(claimChannelRef.current);
     if (pairOkChannelRef.current) supabase.removeChannel(pairOkChannelRef.current);
@@ -507,31 +520,52 @@ export default function WardenDashboard() {
     claimChannelRef.current = null; pairOkChannelRef.current = null; pairFailChannelRef.current = null;
     setPairCode(null); setPairExpires(null); setPairUsedAt(null); setPairedDeviceId(null);
   };
-  const requestPairCode = async () => {
-    if (!pairSentinelId) return;
+
+  // New: allow explicit params so we can call right after Add Sentinel
+  const requestPairCode = async (forSentinelId?: string, forHwUid?: string) => {
+    const sentinelId = forSentinelId ?? pairSentinelId;
+    const hwUid = (forHwUid ?? pairHwUid).trim();
+    if (!sentinelId) return;
+    if (!hwUid) { setErrorMsg("HW UID is required to generate a pairing code."); return; }
+
     setPairLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not signed in.");
+
       const { data, error } = await supabase.functions.invoke("create-claim", {
-        body: { sentinel_id: pairSentinelId, hw_uid: pairHwUid || undefined },
+        body: { sentinel_id: sentinelId, hw_uid: hwUid }, // required now
         headers: {
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           Authorization: `Bearer ${session.access_token}`,
         },
       });
+
       if (error) throw new Error(error.message || "Failed to create pairing code.");
+
       const code = (data as any).code as string;
       const expires_at = (data as any).expires_at as string;
+
+      setPairSentinelId(sentinelId);
+      setPairHwUid(hwUid);
       setPairCode(code); setPairExpires(expires_at);
       setSuccessMsg("Pairing code generated.");
       startPairWatchers(code);
     } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to create pairing code.");
+      const msg = String(e?.message ?? "Failed to create pairing code.");
+      // Surface friendly messages from the edge function
+      if (msg.includes("no_such_device_available")) {
+        setErrorMsg("No such device is available. Ask your architect to add this HW UID and set it as Available.");
+      } else if (msg.includes("device_not_available")) {
+        setErrorMsg("That device exists but is not available. Ask your architect to mark it Available.");
+      } else {
+        setErrorMsg(msg);
+      }
     } finally {
       setPairLoading(false);
     }
   };
+
   const startPairWatchers = (code: string) => {
     if (claimChannelRef.current) supabase.removeChannel(claimChannelRef.current);
     claimChannelRef.current = supabase
@@ -588,7 +622,6 @@ export default function WardenDashboard() {
   const loadAllEvents = async () => {
     setEventsLoading(true);
     try {
-      // switch to TABLE if you haven't created the view v_device_event_feed yet:
       const { data, error } = await supabase
         .from("v_device_event_feed") // ← change to DEVICE_EVENTS_TABLE if needed
         .select("id, created_at, event_type, payload, device_id, sentinel_id")
@@ -621,38 +654,7 @@ export default function WardenDashboard() {
     }
   };
 
-  const validateDevice = async (hwUid: string): Promise<{ exists: boolean; available: boolean; deviceInfo?: any }> => {
-    try {
-      // Check if device exists in the devices table
-      const { data: device, error } = await supabase
-        .from('devices')
-        .select('id, hw_uid, model, sentinel_id, last_seen_at')
-        .eq('hw_uid', hwUid)
-        .maybeSingle();
-
-      if (error) {
-        throw new Error(`Database error: ${error.message}`);
-      }
-
-      if (!device) {
-        return { exists: false, available: false };
-      }
-
-      // Device exists - check if it's available for pairing (not already assigned to a sentinel)
-      const available = !device.sentinel_id;
-
-      return {
-        exists: true,
-        available,
-        deviceInfo: device
-      };
-    } catch (error) {
-      console.error('Device validation error:', error);
-      throw error;
-    }
-  };
-
-  // Global realtime (table) + PAIR_OK toast + GPS_SEARCH filter
+  // Global realtime
   useEffect(() => {
     if (mountedRef.current) return;
     mountedRef.current = true;
@@ -792,10 +794,7 @@ export default function WardenDashboard() {
                 />
               </div>
               <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700 shadow-sm">
-                <Plus className="mr-2 h-4 w-4" /> Add Sentinel
-              </Button>
-              <Button onClick={() => setOpenAddDevice(true)} className="bg-blue-600 hover:bg-blue-700 shadow-sm ml-3">
-                <Plus className="mr-2 h-4 w-4" /> Pair Device
+                <Plus className="mr-2 h-4 w-4" /> Add & Pair
               </Button>
             </div>
           </div>
@@ -805,7 +804,7 @@ export default function WardenDashboard() {
             <Card className="bg-white/90 border-emerald-200">
               <CardHeader><CardTitle>No Sentinels yet</CardTitle></CardHeader>
               <CardContent className="text-gray-600">
-                Add your first Sentinel to start managing their safety profile.
+                Add your first Sentinel and pair an available device.
               </CardContent>
             </Card>
           ) : loading ? (
@@ -1011,17 +1010,27 @@ export default function WardenDashboard() {
       <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
         <AlertDialogContent className="sm:max-w-[520px]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg">Add Sentinel</AlertDialogTitle>
-            <AlertDialogDescription>Create a device user profile you can assign to a device later.</AlertDialogDescription>
+            <AlertDialogTitle className="text-lg">Add Sentinel & Pair Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create the sentinel and immediately generate a pairing code for an <b>available</b> device (HW UID).
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1"><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Juan Dela Cruz" /></div>
             <div className="space-y-1"><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63 9XX XXX XXXX" /></div>
             <div className="space-y-1"><Label>Notes</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions…" /></div>
+            <div className="space-y-1">
+              <Label>Device HW UID <span className="text-red-600">*</span></Label>
+              <Input
+                value={addHwUid}
+                onChange={(e) => setAddHwUid(e.target.value)}
+                placeholder="IMEI / printed UID (must be added by Architect and Available)"
+              />
+            </div>
           </div>
           <AlertDialogFooter>
             <Button variant="ghost" onClick={() => setOpenAdd(false)}>Cancel</Button>
-            <AlertDialogAction disabled={addDisabled} onClick={addSentinel}>Save</AlertDialogAction>
+            <AlertDialogAction disabled={addDisabled} onClick={addSentinel}>Create & Generate Code</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1061,21 +1070,21 @@ export default function WardenDashboard() {
         <AlertDialogContent className="sm:max-w-[520px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg">Pair device</AlertDialogTitle>
-            <AlertDialogDescription>Generate a short code and enter it on the device. Optionally lock the claim to a specific HW UID (IMEI).</AlertDialogDescription>
+            <AlertDialogDescription>Enter the HW UID of an <b>available</b> device to generate a pairing code.</AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label>Lock to HW UID (optional)</Label>
+              <Label>Lock to HW UID <span className="text-red-600">*</span></Label>
               <Input value={pairHwUid} onChange={(e) => setPairHwUid(e.target.value)} placeholder="IMEI / printed UID" />
             </div>
 
             {!pairCode ? (
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={requestPairCode}
+                  onClick={() => requestPairCode()}
                   className="bg-emerald-600 hover:bg-emerald-700"
-                  disabled={pairLoading || !pairSentinelId}
+                  disabled={pairLoading || !pairSentinelId || !pairHwUid.trim()}
                 >
                   {pairLoading ? <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Generating…</span> : "Generate code"}
                 </Button>
@@ -1110,150 +1119,6 @@ export default function WardenDashboard() {
 
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setOpenPair(false)}>Close</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Device Pairing Modal */}
-      <AlertDialog open={openAddDevice} onOpenChange={setOpenAddDevice}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg">Pair Device</AlertDialogTitle>
-            <AlertDialogDescription>
-              Enter the device ID to pair with a sentinel. Only devices added by an Architect can be paired.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          
-          <div className="space-y-4">
-            {addDeviceStep === 1 && (
-              <>
-                <div>
-                  <Label>Device ID</Label>
-                  <Input
-                    value={deviceId}
-                    onChange={(e) => setDeviceId(e.target.value)}
-                    placeholder="Enter device ID..."
-                    className="mt-1"
-                  />
-                </div>
-                
-                <div>
-                  <Label>Phone Number (for SMS pairing code)</Label>
-                  <Input
-                    value={deviceNumber}
-                    onChange={(e) => setDeviceNumber(e.target.value)}
-                    placeholder="Enter phone number..."
-                    className="mt-1"
-                  />
-                </div>
-                
-                {errorMsg && (
-                  <div className="text-red-500 text-sm">{errorMsg}</div>
-                )}
-              </>
-            )}
-            
-            {addDeviceStep === 2 && showPairInstructions && (
-              <div className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-800 mb-2">📱 Device Ready for Pairing</h4>
-                  <p className="text-green-700 text-sm mb-3">
-                    SMS sent to <strong>{deviceNumber}</strong> with pairing code.
-                  </p>
-                </div>
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-800 mb-2">🔧 Device Pairing Instructions</h4>
-                  <ol className="text-blue-700 text-sm space-y-2 list-decimal list-inside">
-                    <li>Send SMS with format: <code className="bg-white px-1 rounded">PAIR [CODE]</code> to the device's phone number</li>
-                    <li>Device will receive the SMS and automatically attempt pairing</li>
-                    <li>Watch for LED feedback on device:
-                      <ul className="ml-4 mt-1 list-disc text-xs">
-                        <li>🟢 Green blinking = sending SMS confirmation</li>
-                        <li>🔵 Blue solid + vibration = pairing successful</li>
-                        <li>🔴 Red + triple vibration = pairing failed</li>
-                      </ul>
-                    </li>
-                    <li>Device will send "Paired OK" SMS confirmation when successful</li>
-                    <li>Test with a button press - should send SMS + appear in dashboard</li>
-                  </ol>
-                </div>
-                
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <h4 className="font-medium text-amber-800 mb-2">⚠️ Troubleshooting</h4>
-                  <ul className="text-amber-700 text-sm space-y-1 list-disc list-inside">
-                    <li>If device shows red LED + triple vibration: check WiFi connection on device</li>
-                    <li>Code expires in 10 minutes - regenerate if needed</li>
-                    <li>Ensure device has cellular signal for SMS reception</li>
-                    <li>Check device status LED: 🟢 Green = network OK, 🔴 Red = network issues</li>
-                    <li>If "Pair failed" SMS received: code may be expired or invalid</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <AlertDialogFooter>
-            {addDeviceStep === 1 ? (
-              <>
-                <AlertDialogCancel onClick={() => {
-                  setOpenAddDevice(false);
-                  setAddDeviceStep(1);
-                  setDeviceId('');
-                  setDeviceNumber('');
-                  setErrorMsg('');
-                }}>
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={async () => {
-                    if (!deviceId.trim() || !deviceNumber.trim()) {
-                      setErrorMsg('Please enter both device ID and phone number');
-                      return;
-                    }
-                    
-                    setErrorMsg('');
-                    
-                    try {
-                      // Validate device exists and is available for pairing
-                      const validation = await validateDevice(deviceId);
-                      
-                      if (!validation.exists) {
-                        setErrorMsg('Device not found. Please check the device ID or contact an Architect to add the device first.');
-                        return;
-                      }
-                      
-                      if (!validation.available) {
-                        setErrorMsg('This device is already paired with another sentinel. Please use an unpaired device.');
-                        return;
-                      }
-                      
-                      // Device is valid and available - proceed to pairing
-                      // Note: In a real implementation, this would generate a pairing code
-                      // using the create-claim Supabase function with sentinel_id and hw_uid
-                      
-                      setShowPairInstructions(true);
-                      setAddDeviceStep(2);
-                    } catch (error) {
-                      setErrorMsg((error as Error)?.message || 'Failed to validate device');
-                    }
-                  }}
-                >
-                  Validate & Pair
-                </AlertDialogAction>
-              </>
-            ) : (
-              <AlertDialogAction onClick={() => {
-                setOpenAddDevice(false);
-                setAddDeviceStep(1);
-                setDeviceId('');
-                setDeviceNumber('');
-                setShowPairInstructions(false);
-                setErrorMsg('');
-              }}>
-                Done
-              </AlertDialogAction>
-            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
