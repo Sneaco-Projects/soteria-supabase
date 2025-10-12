@@ -15,17 +15,15 @@ export default function SignOutButton() {
       const { error } = await supabaseBrowser.auth.signOut();
       if (error) {
         console.error("Sign out error:", error);
-        throw error;
       }
-      // Clear any cached data and redirect
-      window.location.href = "/"; // Hard redirect to ensure complete cleanup
+      // Force a complete page refresh and redirect to clear all state
+      window.location.href = "/";
     } catch (error) {
       console.error("Sign out failed:", error);
-      // Still redirect even if there's an error to prevent stuck state
+      // Still redirect to ensure user isn't stuck in signed-in state
       window.location.href = "/";
-    } finally {
-      setLoading(false);
     }
+    // Note: finally block removed since window.location.href immediately navigates away
   };
 
   return (

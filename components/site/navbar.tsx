@@ -70,10 +70,16 @@ export default function Navbar() {
 
   const onSignOut = async () => {
     try {
-      await supabase.auth.signOut();
-    } finally {
-      router.push("/"); // back to marketing site
-      router.refresh();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Sign out error:", error);
+      }
+      // Force a complete page refresh to clear all state
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Sign out failed:", error);
+      // Still redirect to ensure user isn't stuck
+      window.location.href = "/";
     }
   };
 
