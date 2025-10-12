@@ -552,17 +552,7 @@ export default function WardenDashboard() {
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup FULL:", { 
-          hwUid, 
-          dev, 
-          devError, 
-          phoneValue: dev?.phone, 
-          modelValue: dev?.model,
-          available: dev?.available,
-          sentinel_id: dev?.sentinel_id,
-          errorMessage: devError?.message,
-          errorCode: devError?.code
-        });
+        // Device lookup successful
         
         // Try phone field first, fallback to model field for backwards compatibility
         const contactNumber = dev?.phone || dev?.model || null;
@@ -599,17 +589,7 @@ export default function WardenDashboard() {
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup FULL (path 2):", { 
-          hwUid, 
-          dev, 
-          devError, 
-          phoneValue: dev?.phone, 
-          modelValue: dev?.model,
-          available: dev?.available,
-          sentinel_id: dev?.sentinel_id,
-          errorMessage: devError?.message,
-          errorCode: devError?.code
-        });
+        // Device lookup successful (path 2)
         
         // Try phone field first, fallback to model field for backwards compatibility
         const contactNumber = dev?.phone || dev?.model || null;
