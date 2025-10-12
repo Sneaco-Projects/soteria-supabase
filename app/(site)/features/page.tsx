@@ -159,27 +159,6 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      {/* What’s not included (set expectations) */}
-      <section className="py-14 px-4 bg-white/55 backdrop-blur-sm relative z-10">
-        <div className="container mx-auto">
-          <Card className="bg-white/90 border-emerald-200">
-            <CardHeader className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-emerald-700" />
-              <CardTitle className="text-gray-900">Out of scope for now</CardTitle>
-              <CardDescription className="text-gray-600">
-                We focus on pairing, events, and maps. The following are <b>not</b> part of this release:
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-gray-700">
-              <ul className="list-disc pl-5 space-y-2">
-                <li>Fall detection, heart-rate monitoring, or medication reminders</li>
-                <li>Mobile app distribution; current UI targets web dashboards</li>
-                <li>Automated dispatching—alerts are routed to your own teams/contacts</li>
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
 
       {/* CTA */}
       <section className="py-16 px-4 relative z-10">
