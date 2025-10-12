@@ -154,6 +154,96 @@ function StatusDot({ green }: { green: boolean }) {
   );
 }
 
+/* ========= Pretty payload renderer (event-agnostic) ========= */
+function PrettyPayload({
+  p,
+  mapHref,
+  lat,
+  lng,
+}: {
+  p: any;
+  mapHref: string | null;
+  lat?: number;
+  lng?: number;
+}) {
+  if (!p || typeof p !== "object") return null;
+
+  const message =
+    typeof p.message === "string" && p.message.trim() ? p.message.trim() : null;
+
+  const special = new Set(["message", "lat", "lng"]);
+  const restEntries = Object.entries(p).filter(([k]) => !special.has(k));
+
+  return (
+    <div className="mt-2 rounded-lg border bg-white/90 p-3">
+      {/* Primary message */}
+      {message && (
+        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[13px] font-medium text-emerald-900">
+          <span>📝</span>
+          <span className="whitespace-pre-wrap">{message}</span>
+        </div>
+      )}
+
+      {/* Geolocation + Maps button */}
+      {(lat !== undefined && lng !== undefined) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+            title={`${lat.toFixed(6)}, ${lng.toFixed(6)}`}
+          >
+            📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+          </span>
+
+          {mapHref && (
+            <a
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+              href={mapHref}
+              target="_blank"
+              rel="noreferrer"
+              title={`${lat.toFixed(6)}, ${lng.toFixed(6)}`}
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              Open in Maps
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Other simple key/values */}
+      {restEntries.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-2">
+          {restEntries.map(([k, v]) => (
+            <span
+              key={k}
+              className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs"
+              title={String(v)}
+            >
+              <span className="font-medium text-zinc-700">{k}:</span>
+              <span className="text-zinc-700">
+                {typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+                  ? String(v)
+                  : Array.isArray(v)
+                    ? `Array(${v.length})`
+                    : "Object"}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsible raw JSON for debugging */}
+      <details className="mt-1 group">
+        <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-700">
+          Raw JSON
+        </summary>
+        <pre className="mt-2 max-h-48 overflow-auto rounded border bg-zinc-50 p-2 text-xs">
+{JSON.stringify(p, null, 2)}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
 export default function WardenDashboard() {
   /* ----------------- App State ----------------- */
   const [sentinels, setSentinels] = useState<Sentinel[]>([]);
@@ -439,7 +529,7 @@ export default function WardenDashboard() {
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load device events.");
     } finally {
-      setEventsLoading(false);
+           setEventsLoading(false);
     }
   };
 
@@ -751,30 +841,10 @@ export default function WardenDashboard() {
                                 ) : null}
                               </div>
 
-                              {msg && <div className="mt-1 text-gray-800">{msg}</div>}
-
-                              {mapHref && (
-                                <div className="mt-1">
-                                 <a
-                                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
-                                  href={mapHref}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={`${lat?.toFixed(6)}, ${lng?.toFixed(6)}`}
-                                >
-                                  <MapPin className="h-3.5 w-3.5" />
-                                  Open in Maps
-                                </a>          
-
-                                </div>
-                              )}
+                              {/* Pretty payload block */}
+                              <PrettyPayload p={p} mapHref={mapHref} lat={lat} lng={lng} />
                             </div>
                           </div>
-
-                          {/* Full JSON payload (append-only detailed log) */}
-                          <pre className="mt-2 max-h-48 overflow-auto rounded border bg-zinc-50 p-2 text-xs">
-{JSON.stringify(p, null, 2)}
-                          </pre>
                         </div>
                       );
                     })}
