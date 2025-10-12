@@ -556,12 +556,19 @@ export default function WardenDashboard() {
         // Fetch device contact number (stored in devices.phone)
         const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("hw_uid, phone")
+          .select("hw_uid, phone, model")
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup:", { hwUid, dev, devError });
-        setPairContact(dev?.phone ?? null);
+        console.log("Device lookup:", { hwUid, dev, devError, phoneValue: dev?.phone, modelValue: dev?.model });
+        
+        // Try phone field first, fallback to model field for backwards compatibility
+        const contactNumber = dev?.phone || dev?.model || null;
+        setPairContact(contactNumber);
+        
+        if (!contactNumber) {
+          console.warn("No contact number found for device:", hwUid, "Device data:", dev);
+        }
 
         setPairSentinelId(sentinelId);
         setPairHwUid(hwUid);
@@ -579,12 +586,19 @@ export default function WardenDashboard() {
 
         const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("hw_uid, phone")
+          .select("hw_uid, phone, model")
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup (path 2):", { hwUid, dev, devError });
-        setPairContact(dev?.phone ?? null);
+        console.log("Device lookup (path 2):", { hwUid, dev, devError, phoneValue: dev?.phone, modelValue: dev?.model });
+        
+        // Try phone field first, fallback to model field for backwards compatibility
+        const contactNumber = dev?.phone || dev?.model || null;
+        setPairContact(contactNumber);
+        
+        if (!contactNumber) {
+          console.warn("No contact number found for device:", hwUid, "Device data:", dev);
+        }
 
         setPairSentinelId(sentinelId);
         setPairHwUid(hwUid);
