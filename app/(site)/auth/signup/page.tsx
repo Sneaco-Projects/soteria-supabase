@@ -104,7 +104,7 @@ export default function SignUpForm() {
 
       // If confirmations are ON, no session yet → show success modal then route to signin after OK.
       if (!data.session) {
-        setSuccessMsg("Account created! Check your email to confirm your account, then sign in.");
+        setSuccessMsg("Warden account created! Check your email to confirm, then sign in to start protecting your family.");
         setPendingRedirect("/auth/signin");
         return;
       }
@@ -178,13 +178,41 @@ export default function SignUpForm() {
         </div>
 
         <Card className="bg-white/90 backdrop-blur-lg border-emerald-200 shadow-xl">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center text-gray-800">Get Started</CardTitle>
+          <CardHeader className="space-y-3">
+            <CardTitle className="text-2xl text-center text-gray-800">Sign Up as Warden</CardTitle>
             <CardDescription className="text-center text-gray-600">
-              Join SOTERIA to protect yourself and your loved ones
+              <strong>You're registering as a Warden</strong> - the person who manages safety devices for family members.
             </CardDescription>
+            
+            {/* Role Explanation Box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Heart className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="text-sm text-gray-700">
+                  <p className="font-semibold text-blue-800 mb-2">Important: Your loved ones (sentinels) DON'T need to sign up!</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• <strong>Wardens</strong> manage the system and receive emergency alerts</li>
+                    <li>• <strong>Sentinels</strong> just carry the safety device - no app needed</li>
+                    <li>• One Warden account can protect multiple family members</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
+            {/* What Happens Next Section */}
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <h4 className="font-semibold text-emerald-800 mb-2 text-sm">What happens after you sign up:</h4>
+              <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
+                <li>Add your family members as "sentinels" in your dashboard</li>
+                <li>Get safety devices and pair them with your sentinels</li>
+                <li>Your sentinels carry the devices - that's it!</li>
+                <li>You receive alerts and can help in emergencies</li>
+              </ol>
+            </div>
+
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -225,7 +253,7 @@ export default function SignUpForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-gray-700">Phone Number</Label>
+                <Label htmlFor="phone" className="text-gray-700">Your Phone Number</Label>
                 <Input
                   id="phone"
                   type="tel"
@@ -235,6 +263,7 @@ export default function SignUpForm() {
                   className="bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
                   required
                 />
+                <p className="text-xs text-gray-500">This is where you'll receive emergency alerts from your sentinels</p>
               </div>
 
               <div className="space-y-2">
@@ -310,14 +339,14 @@ export default function SignUpForm() {
                 className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white"
                 disabled={loading}
               >
-                {loading ? "Creating Account..." : "Create Account"}
+                {loading ? "Creating Warden Account..." : "Create Warden Account"}
               </Button>
             </form>
 
             <p className="text-center text-sm text-gray-600 mt-6">
-              Already have an account?{" "}
+              Already have a Warden account?{" "}
               <Link href="/auth/signin" className="text-emerald-600 hover:underline">
-                Sign in
+                Sign in here
               </Link>
             </p>
           </CardContent>
