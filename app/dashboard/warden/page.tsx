@@ -46,6 +46,8 @@ import {
   ShieldAlert,
   MessageSquareText,
   Info,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 /* ===================== Types & consts ===================== */
@@ -242,6 +244,66 @@ function PrettyPayload({
       </details>
     </div>
   );
+}
+
+/* ========= Timeline helpers (severity-first + grouping) ========= */
+type Tone = "danger" | "warn" | "success" | "info" | "muted";
+
+const toneClasses: Record<Tone, string> = {
+  danger: "border-red-300 bg-red-50/70",
+  warn: "border-amber-300 bg-amber-50/70",
+  success: "border-emerald-300 bg-emerald-50/70",
+  info: "border-sky-300 bg-sky-50/70",
+  muted: "border-zinc-200 bg-white/80",
+};
+
+const railClasses: Record<Tone, string> = {
+  danger: "bg-red-400",
+  warn: "bg-amber-400",
+  success: "bg-emerald-500",
+  info: "bg-sky-500",
+  muted: "bg-zinc-300",
+};
+
+function getEventMeta(e: DeviceEvent): { Icon: any; tone: Tone; label: string } {
+  switch (e.event_type) {
+    case "SOS":        return { Icon: ShieldAlert,  tone: "danger",  label: "SOS" };
+    case "BTN_SHORT":  return { Icon: Bell,         tone: "warn",    label: "Button" };
+    case "IN_SMS":     return { Icon: MessageSquareText, tone: "info", label: "SMS" };
+    case "PAIR_OK":    return { Icon: CheckCircle2, tone: "success", label: "Paired" };
+    case "PAIR_FAIL":
+    case "UNPAIR_DENY":return { Icon: XCircle,      tone: "danger",  label: "Pair error" };
+    case "HEALTH":     return { Icon: Info,         tone: "muted",   label: "Health" };
+    default:           return { Icon: Info,         tone: "muted",   label: e.event_type };
+  }
+}
+
+function dayLabel(d: Date) {
+  const now = new Date();
+  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = (a.getTime() - b.getTime()) / 86400000;
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return d.toLocaleDateString();
+}
+
+function compactHealth(events: DeviceEvent[]) {
+  const out: (DeviceEvent & { _count?: number })[] = [];
+  for (const e of events) {
+    const last = out[out.length - 1];
+    if (
+      last &&
+      last.event_type === "HEALTH" &&
+      e.event_type === "HEALTH" &&
+      Math.abs(Date.parse(e.created_at) - Date.parse(last.created_at)) < 90_000
+    ) {
+      last._count = (last._count ?? 1) + 1;
+    } else {
+      out.push({ ...e });
+    }
+  }
+  return out;
 }
 
 export default function WardenDashboard() {
@@ -529,7 +591,7 @@ export default function WardenDashboard() {
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load device events.");
     } finally {
-           setEventsLoading(false);
+      setEventsLoading(false);
     }
   };
 
@@ -816,38 +878,85 @@ export default function WardenDashboard() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {visibleEvents.slice(0, 200).map((e) => {
-                      const p = e.payload || {};
-                      const msg = typeof p.message === "string" ? p.message : "";
-                      const lat = typeof p.lat === "number" ? p.lat : undefined;
-                      const lng = typeof p.lng === "number" ? p.lng : undefined;
-                      const mapHref = (lat !== undefined && lng !== undefined)
-                        ? `https://maps.google.com/maps?q=${lat},${lng}` : null;
+                    {(() => {
+                      const items = compactHealth(visibleEvents).slice(0, 200);
+                      let currentDay = "";
+                      return items.map((e) => {
+                        const p = e.payload || {};
+                        const lat = typeof p.lat === "number" ? p.lat : undefined;
+                        const lng = typeof p.lng === "number" ? p.lng : undefined;
+                        const mapHref = (lat !== undefined && lng !== undefined)
+                          ? `https://maps.google.com/maps?q=${lat},${lng}` : null;
 
-                      return (
-                        <div key={String(e.id)} className="rounded-md border bg-white/80 p-3 text-sm">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <EventBadge e={e} />
-                                <div className="truncate">{prettyLabel(e)}</div>
-                                <span className="text-xs text-gray-500">
-                                  {new Date(e.created_at).toLocaleTimeString()}
-                                </span>
+                        const when = new Date(e.created_at);
+                        const day = dayLabel(when);
+                        const { Icon, tone } = getEventMeta(e);
+
+                        const header = (
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className={`h-8 w-8 shrink-0 rounded-full ring-2 ring-white flex items-center justify-center ${
+                              tone === "danger" ? "bg-red-100" :
+                              tone === "warn" ? "bg-amber-100" :
+                              tone === "success" ? "bg-emerald-100" :
+                              tone === "info" ? "bg-sky-100" : "bg-zinc-100"
+                            }`}>
+                              <Icon className={`h-4 w-4 ${
+                                tone === "danger" ? "text-red-700" :
+                                tone === "warn" ? "text-amber-700" :
+                                tone === "success" ? "text-emerald-700" :
+                                tone === "info" ? "text-sky-700" : "text-zinc-700"
+                              }`} />
+                            </div>
+                            <div className="truncate">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium">{prettyLabel(e)}</span>
+                                {(e as any)._count ? (
+                                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">
+                                    ×{(e as any)._count}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {when.toLocaleTimeString()}
                                 {e.device_id ? (
-                                  <span className="text-[11px] text-gray-500">
+                                  <span className="ml-1 text-[11px] text-gray-500">
                                     • dev <span className="font-mono">{e.device_id.slice(0, 8)}…</span>
                                   </span>
                                 ) : null}
                               </div>
-
-                              {/* Pretty payload block */}
-                              <PrettyPayload p={p} mapHref={mapHref} lat={lat} lng={lng} />
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+
+                        const card = (
+                          <div
+                            key={String(e.id)}
+                            className={`relative rounded-md border p-3 text-sm ${toneClasses[tone]}`}
+                          >
+                            <div className={`absolute left-0 top-0 h-full w-1.5 rounded-l-md ${railClasses[tone]}`} />
+                            {header}
+                            <PrettyPayload p={p} mapHref={mapHref} lat={lat} lng={lng} />
+                          </div>
+                        );
+
+                        const daySep =
+                          day !== currentDay ? (
+                            (currentDay = day),
+                            <div key={`sep-${day}`} className="mt-4 mb-2 flex items-center gap-2">
+                              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-300 to-transparent" />
+                              <span className="text-xs font-medium text-zinc-600">{day}</span>
+                              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-300 to-transparent" />
+                            </div>
+                          ) : null;
+
+                        return (
+                          <div key={`wrap-${e.id}`} className="space-y-2">
+                            {daySep}
+                            {card}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </CardContent>
