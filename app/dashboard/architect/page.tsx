@@ -90,7 +90,7 @@ export default function ArchitectDashboard() {
       const available =
         "available" in r && typeof r.available === "boolean"
           ? !!r.available
-          : !assigned; // fallback: not assigned => available
+          : !assigned; // fallback: not assigned => available (if you store flag in table, this is ignored)
       return {
         id,
         hw_uid: r.hw_uid,
@@ -132,6 +132,7 @@ export default function ArchitectDashboard() {
       const { error } = await supabase.from("devices").insert({
         hw_uid: hw,
         model: newContact.trim() || null, // store Contact # in model column
+        available: false,                 // start Unavailable
       });
       if (error) throw error;
 
@@ -154,12 +155,11 @@ export default function ArchitectDashboard() {
   const saveEdit = async () => {
     if (!editId) return;
     try {
-      // NOTE: update 'model' with contact #
       const { error } = await supabase
         .from("devices")
         .update({
           hw_uid: editHwUid.trim(),
-          model: editContact.trim() || null,
+          model: editContact.trim() || null, // contact #
         })
         .eq("id", editId);
       if (error) throw error;
@@ -173,7 +173,6 @@ export default function ArchitectDashboard() {
 
   const toggleAvailable = async (d: DeviceRow, next: boolean) => {
     try {
-      // Write to devices.available (adjust if you store this elsewhere)
       const { error } = await supabase
         .from("devices")
         .update({ available: next })
@@ -308,7 +307,7 @@ export default function ArchitectDashboard() {
 
                       {/* Right: controls */}
                       <div className="flex items-center gap-2 shrink-0">
-                        {/* Toggle (simple checkbox style) */}
+                        {/* Toggle */}
                         <label className="flex items-center gap-2 text-sm text-gray-600">
                           <input
                             type="checkbox"
@@ -409,7 +408,7 @@ export default function ArchitectDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Device?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove the device. You can only delete devices that are safe to remove per your RLS/policies.
+              This will permanently remove the device. You can only delete devices that are allowed by your RLS/policies.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
