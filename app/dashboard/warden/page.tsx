@@ -755,16 +755,17 @@ export default function WardenDashboard() {
 
                               {mapHref && (
                                 <div className="mt-1">
-                                  <a
-                                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-zinc-700 hover:bg-zinc-50"
-                                    href={mapHref}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title={`${lat?.toFixed(6)}, ${lng?.toFixed(6)}`}
-                                  >
-                                    <MapPin className="h-3.5 w-3.5" />
-                                    Open in Maps
-                                  </a>
+                                 <a
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                                  href={mapHref}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={`${lat?.toFixed(6)}, ${lng?.toFixed(6)}`}
+                                >
+                                  <MapPin className="h-3.5 w-3.5" />
+                                  Open in Maps
+                                </a>          
+
                                 </div>
                               )}
                             </div>
