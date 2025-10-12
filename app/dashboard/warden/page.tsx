@@ -336,8 +336,8 @@ export default function WardenDashboard() {
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [pairExpires, setPairExpires] = useState<string | null>(null);
   const [pairHwUid, setPairHwUid] = useState(""); // REQUIRED
+  const [pairContact, setPairContact] = useState<string | null>(null); // Contact # from devices.model
   const [pairLoading, setPairLoading] = useState(false);
-  const [pairContact, setPairContact] = useState<string | null>(null); // contact # from device.model
 
   // feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -432,20 +432,6 @@ export default function WardenDashboard() {
     );
   }, [sentinels, query]);
 
-  /* ----------------- Helper: fetch contact by HW UID ----------------- */
-  const fetchPairContact = async (hwUid: string) => {
-    try {
-      const { data } = await supabase
-        .from("devices")
-        .select("model")
-        .eq("hw_uid", hwUid)
-        .maybeSingle();
-      setPairContact((data as any)?.model ?? null);
-    } catch {
-      setPairContact(null);
-    }
-  };
-
   /* ----------------- Sentinel CRUD (Add = Pair) ----------------- */
   const addSentinel = async () => {
     if (addDisabled) return;
@@ -474,7 +460,6 @@ export default function WardenDashboard() {
       setPairSentinelId(ins.id);
       setPairHwUid(addHwUid.trim());
       setOpenPair(true);
-      await fetchPairContact(addHwUid.trim()); // show contact in instruction
       setAddHwUid("");
 
       // Generate code immediately (requires HW UID)
@@ -539,22 +524,20 @@ export default function WardenDashboard() {
     setPairContact(null);
   };
 
-  // New: allow explicit params so we can call right after Add Sentinel
+  // Robust: supports success {code,expires_at} or error {ok:false,error_code,...}
   const requestPairCode = async (forSentinelId?: string, forHwUid?: string) => {
     const sentinelId = forSentinelId ?? pairSentinelId;
     const hwUid = (forHwUid ?? pairHwUid).trim();
     if (!sentinelId) return;
-    if (!hwUid) { setErrorMsg("HW UID is required to generate a pairing code."); return; }
+    if (!hwUid) { setErrorMsg("Device ID (HW UID) is required to generate a pairing code."); return; }
 
     setPairLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not signed in.");
 
-      await fetchPairContact(hwUid); // populate Contact # UI
-
       const { data, error } = await supabase.functions.invoke("create-claim", {
-        body: { sentinel_id: sentinelId, hw_uid: hwUid }, // required now
+        body: { sentinel_id: sentinelId, hw_uid: hwUid },
         headers: {
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           Authorization: `Bearer ${session.access_token}`,
@@ -563,18 +546,79 @@ export default function WardenDashboard() {
 
       if (error) throw new Error(error.message || "Failed to create pairing code.");
 
-      const code = (data as any).code as string;
-      const expires_at = (data as any).expires_at as string;
+      const payload = data as any;
 
-      setPairSentinelId(sentinelId);
-      setPairHwUid(hwUid);
-      setPairCode(code); setPairExpires(expires_at);
-      setSuccessMsg("Pairing code generated.");
-      startPairWatchers(code);
+      // Success path 1: legacy shape {code, expires_at}
+      if (payload?.code && payload?.expires_at) {
+        const code = payload.code as string;
+        const expires_at = payload.expires_at as string;
+
+        // Fetch device contact number (stored in devices.model)
+        const { data: dev } = await supabase
+          .from("devices")
+          .select("model")
+          .eq("hw_uid", hwUid)
+          .maybeSingle();
+        setPairContact(dev?.model ?? null);
+
+        setPairSentinelId(sentinelId);
+        setPairHwUid(hwUid);
+        setPairCode(code);
+        setPairExpires(expires_at);
+        setSuccessMsg("Pairing code generated.");
+        startPairWatchers(code);
+        return;
+      }
+
+      // Success path 2: newer shape {ok:true, code, expires_at}
+      if (payload?.ok && payload?.code && payload?.expires_at) {
+        const code = payload.code as string;
+        const expires_at = payload.expires_at as string;
+
+        const { data: dev } = await supabase
+          .from("devices")
+          .select("model")
+          .eq("hw_uid", hwUid)
+          .maybeSingle();
+        setPairContact(dev?.model ?? null);
+
+        setPairSentinelId(sentinelId);
+        setPairHwUid(hwUid);
+        setPairCode(code);
+        setPairExpires(expires_at);
+        setSuccessMsg("Pairing code generated.");
+        startPairWatchers(code);
+        return;
+      }
+
+      // Error envelope from edge function
+      if (payload?.ok === false) {
+        const code = payload?.error_code as string | undefined;
+        if (code === "no_such_device_available") {
+          setErrorMsg("No such device is available. Ask your architect to add this Device ID and mark it Available.");
+        } else if (code === "device_not_available") {
+          setErrorMsg("That device exists but is not marked Available.");
+        } else if (code === "device_already_assigned") {
+          setErrorMsg("That device is already assigned to a sentinel.");
+        } else if (code === "active_claim_locked_to_different_hw") {
+          setErrorMsg("Active pairing code is locked to a different device (HW UID mismatch).");
+        } else if (code === "sentinel_not_owned") {
+          setErrorMsg("You don't own that sentinel.");
+        } else if (code === "missing_hw_uid") {
+          setErrorMsg("Please enter a Device ID.");
+        } else {
+          setErrorMsg(payload?.message ?? "Failed to create pairing code.");
+        }
+        return;
+      }
+
+      // Unknown payload
+      setErrorMsg("Failed to create pairing code.");
     } catch (e: any) {
       const msg = String(e?.message ?? "Failed to create pairing code.");
+      // Friendly downgrades for known reasons embedded in messages (if any)
       if (msg.includes("no_such_device_available")) {
-        setErrorMsg("No such device is available. Ask your architect to add this HW UID and set it as Available.");
+        setErrorMsg("No such device is available. Ask your architect to add this Device ID and set it as Available.");
       } else if (msg.includes("device_not_available")) {
         setErrorMsg("That device exists but is not available. Ask your architect to mark it Available.");
       } else {
@@ -1031,15 +1075,21 @@ export default function WardenDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg">Add Sentinel & Pair Device</AlertDialogTitle>
             <AlertDialogDescription>
-              Create the sentinel and immediately generate a pairing code for an <b>available</b> device (HW UID).
+              Enter the sentinel and warden details, then generate a pairing code for an <b>available</b> Device ID.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1"><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Juan Dela Cruz" /></div>
-            <div className="space-y-1"><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63 9XX XXX XXXX" /></div>
-            <div className="space-y-1"><Label>Notes</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions…" /></div>
+            <div className="space-y-1"><Label>Name of the Sentinel</Label>
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Juan Dela Cruz" />
+            </div>
+            <div className="space-y-1"><Label>Number of the Warden</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63 9XX XXX XXXX" />
+            </div>
+            <div className="space-y-1"><Label>Notes</Label>
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions…" />
+            </div>
             <div className="space-y-1">
-              <Label>Device HW UID <span className="text-red-600">*</span></Label>
+              <Label>Device ID (HW UID) <span className="text-red-600">*</span></Label>
               <Input
                 value={addHwUid}
                 onChange={(e) => setAddHwUid(e.target.value)}
@@ -1089,12 +1139,12 @@ export default function WardenDashboard() {
         <AlertDialogContent className="sm:max-w-[520px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg">Pair device</AlertDialogTitle>
-            <AlertDialogDescription>Enter the HW UID of an <b>available</b> device to generate a pairing code.</AlertDialogDescription>
+            <AlertDialogDescription>Enter an <b>available</b> Device ID to generate a pairing code.</AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label>Lock to HW UID <span className="text-red-600">*</span></Label>
+              <Label>Device ID (HW UID) <span className="text-red-600">*</span></Label>
               <Input value={pairHwUid} onChange={(e) => setPairHwUid(e.target.value)} placeholder="IMEI / printed UID" />
             </div>
 
@@ -1115,7 +1165,7 @@ export default function WardenDashboard() {
                   <div className="font-mono text-2xl tracking-wider">{pairCode}</div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={async () => {
-                      await navigator.clipboard.writeText(pairCode);
+                      await navigator.clipboard.writeText(pairCode!);
                       setSuccessMsg("Code copied to clipboard.");
                     }}>
                       <CopyIcon className="mr-2 h-4 w-4" /> Copy
@@ -1129,15 +1179,9 @@ export default function WardenDashboard() {
                   Expires: {pairExpires ? new Date(pairExpires).toLocaleString() : ""}
                   {pairUsedAt ? <> • Used: {new Date(pairUsedAt).toLocaleString()}</> : null}
                 </div>
-                <div className="text-xs text-gray-600">
-                  Send <span className="font-mono">PAIR {pairCode}</span> to the device’s <b>Contact #</b>{" "}
-                  {pairContact ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800">
-                      {pairContact}
-                    </span>
-                  ) : (
-                    <span className="italic text-gray-400">unknown</span>
-                  )}.
+                <div className="text-sm text-emerald-700 font-medium mt-2">
+                  Send <span className="font-mono">PAIR {pairCode}</span> to{" "}
+                  <span className="font-mono">{pairContact ?? "the device’s Contact #"}</span>.
                 </div>
               </div>
             )}
