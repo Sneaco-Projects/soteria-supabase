@@ -58,9 +58,10 @@ export default function SignUpForm() {
     }
 
     const role = profileData?.role ?? "warden";
-    if (role === "admin") router.push("/dashboard/admin");      // Architect
+    if (role === "architect") router.push("/dashboard/architect");
+    else if (role === "provider") router.push("/dashboard/provider");
     else if (role === "warden") router.push("/dashboard/warden");
-    else router.push("/");
+    else router.push("/dashboard/warden"); // Default fallback
   };
 
   // Password rules + live checklist

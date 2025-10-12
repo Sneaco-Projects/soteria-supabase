@@ -9,12 +9,13 @@ import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase-client";
 
-type Role = "admin" | "warden" | null;
+type Role = "architect" | "provider" | "warden" | null;
 
 function getDashboardPath(role: Role) {
-  if (role === "admin") return "/dashboard/architect"; // admin → architect dashboard
+  if (role === "architect") return "/dashboard/architect";
+  if (role === "provider") return "/dashboard/provider";
   if (role === "warden") return "/dashboard/warden";
-  return "/dashboard/warden";
+  return "/dashboard/warden"; // Default fallback
 }
 
 export default function Navbar() {

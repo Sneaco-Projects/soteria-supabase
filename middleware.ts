@@ -10,7 +10,7 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   // Public paths that don't need auth
-  const publicPaths = ["/", "/login", "/signup", "/api"];
+  const publicPaths = ["/", "/auth", "/api"];
   if (publicPaths.some((p) => path === p || path.startsWith(p))) {
     return res;
   }
@@ -30,7 +30,12 @@ export async function middleware(req: NextRequest) {
 
   const role = profile?.role; // "warden" | "provider" | "architect"
 
-  // Hard blocks by namespace
+  // Redirect /dashboard to the user's role-specific dashboard
+  if (path === "/dashboard") {
+    return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
+  }
+
+  // Hard blocks by namespace - prevent role access to wrong dashboards
   if (path.startsWith("/dashboard/architect") && role !== "architect") {
     return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
   }

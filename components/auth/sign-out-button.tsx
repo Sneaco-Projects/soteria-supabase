@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase-client";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function SignOutButton() {
   const [loading, setLoading] = useState(false);
@@ -12,9 +12,17 @@ export default function SignOutButton() {
   const signOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
-      router.push("/");     // back to site pages
-      router.refresh();     // re-render navbar state
+      const { error } = await supabaseBrowser.auth.signOut();
+      if (error) {
+        console.error("Sign out error:", error);
+        throw error;
+      }
+      // Clear any cached data and redirect
+      window.location.href = "/"; // Hard redirect to ensure complete cleanup
+    } catch (error) {
+      console.error("Sign out failed:", error);
+      // Still redirect even if there's an error to prevent stuck state
+      window.location.href = "/";
     } finally {
       setLoading(false);
     }
