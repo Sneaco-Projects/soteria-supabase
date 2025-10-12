@@ -318,8 +318,7 @@ export default function WardenDashboard() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [addHwUid, setAddHwUid] = useState(""); // REQUIRED: architect-provisioned device to pair with
-  const addDisabled = !fullName.trim() || !addHwUid.trim();
+  // Removed addHwUid since Add Sentinel no longer requires device pairing
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -434,38 +433,31 @@ export default function WardenDashboard() {
 
   /* ----------------- Sentinel CRUD (Add = Pair) ----------------- */
   const addSentinel = async () => {
-    if (addDisabled) return;
+    if (!fullName.trim()) { setErrorMsg("Full name is required."); return; }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in.");
 
-      // Insert and return the new sentinel id
-      const { data: ins, error } = await supabase
+      // Insert the new sentinel
+      const { error } = await supabase
         .from("sentinels")
         .insert({
           owner_guardian_id: user.id,
           full_name: fullName.trim(),
           phone: phone.trim() || null,
           notes: notes.trim() || null,
-        })
-        .select("id")
-        .single();
+        });
       if (error) throw error;
 
-      // Clear add form
+      // Clear add form and reload sentinels
       setOpenAdd(false);
       setFullName(""); setPhone(""); setNotes("");
-
-      // Auto-open Pair modal with HW UID and generate claim
-      setPairSentinelId(ins.id);
-      setPairHwUid(addHwUid.trim());
-      setOpenPair(true);
-      setAddHwUid("");
-
-      // Generate code immediately (requires HW UID)
-      await requestPairCode(ins.id, addHwUid.trim());
+      setSuccessMsg("Sentinel added successfully. You can now pair them with a device.");
+      
+      // Reload the sentinels list
+      await loadSentinels();
     } catch (e: any) {
-      const msg = String(e?.message ?? "Failed to add & pair sentinel.");
+      const msg = String(e?.message ?? "Failed to add sentinel.");
       setErrorMsg(msg);
     }
   };
@@ -1091,9 +1083,9 @@ export default function WardenDashboard() {
       <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
         <AlertDialogContent className="sm:max-w-[520px]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg">Add Sentinel & Pair Device</AlertDialogTitle>
+            <AlertDialogTitle className="text-lg">Add Sentinel</AlertDialogTitle>
             <AlertDialogDescription>
-              Enter the sentinel and warden details, then generate a pairing code for an <b>available</b> Device ID.
+              Enter the sentinel and warden details. You can pair with a device later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
@@ -1106,18 +1098,10 @@ export default function WardenDashboard() {
             <div className="space-y-1"><Label>Notes</Label>
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions…" />
             </div>
-            <div className="space-y-1">
-              <Label>Device ID (HW UID) <span className="text-red-600">*</span></Label>
-              <Input
-                value={addHwUid}
-                onChange={(e) => setAddHwUid(e.target.value)}
-                placeholder="IMEI / printed UID (must be added by Architect and Available)"
-              />
-            </div>
           </div>
           <AlertDialogFooter>
             <Button variant="ghost" onClick={() => setOpenAdd(false)}>Cancel</Button>
-            <AlertDialogAction disabled={addDisabled} onClick={addSentinel}>Create & Generate Code</AlertDialogAction>
+            <AlertDialogAction disabled={!fullName.trim()} onClick={addSentinel}>Add Sentinel</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
