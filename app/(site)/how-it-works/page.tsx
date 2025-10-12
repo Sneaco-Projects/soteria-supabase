@@ -258,32 +258,6 @@ export default function HowItWorksPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 relative">
-        <div className="container mx-auto text-center">
-          <div className="max-w-4xl mx-auto space-y-8">
-            <h2 className="text-6xl font-bold text-gray-800 leading-tight">See SOTERIA in Action</h2>
-            <p className="text-2xl text-gray-600">
-              Experience the peace of mind that comes with reliable medical alert protection
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-xl px-12 py-6 rounded-full border-0 shadow-lg transform hover:scale-105 transition-all text-white"
-              >
-                Watch Demo Video
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="text-xl px-12 py-6 rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-transparent"
-              >
-                Schedule Free Consultation
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Footer */}
       <footer className="bg-white/80 backdrop-blur-lg border-t border-emerald-200 py-12 px-4 relative z-10">

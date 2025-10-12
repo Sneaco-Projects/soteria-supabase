@@ -346,36 +346,6 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 relative">
-        <div className="container mx-auto text-center">
-          <div className="max-w-4xl mx-auto space-y-8">
-            <h2 className="text-6xl font-bold text-gray-800 leading-tight">Experience the Future of Medical Alerts</h2>
-            <p className="text-2xl text-gray-600">Don't settle for outdated technology when your life is on the line</p>
-
-            <div className="flex flex-col sm:flex-row gap-6 justify-center">
-              <Button
-                size="lg"
-                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-xl px-12 py-6 rounded-full border-0 shadow-lg transform hover:scale-105 transition-all text-white"
-              >
-                <Shield className="mr-3 h-6 w-6" />
-                Get SOTERIA Today
-                <ArrowRight className="ml-3 h-6 w-6" />
-              </Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                className="text-xl px-12 py-6 rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-transparent"
-              >
-                <Play className="mr-3 h-6 w-6" />
-                Watch Demo
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-white/80 backdrop-blur-lg border-t border-emerald-200 py-12 px-4 relative z-10">
         <div className="container mx-auto">

@@ -120,7 +120,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-800">Email Support</h3>
-                      <p className="text-gray-600">{loadingSettings ? "Loading…" : settings?.support_email ?? "—"}</p>
+                      <p className="text-gray-600">support@soteria.io</p>
                       <p className="text-sm text-gray-500">We typically respond within 24 hours</p>
                     </div>
                   </div>
@@ -133,7 +133,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-800">Emergency Support</h3>
-                      <p className="text-gray-600">{loadingSettings ? "Loading…" : settings?.emergency_phone ?? "—"}</p>
+                      <p className="text-gray-600">+639451458138</p>
                       <p className="text-sm text-gray-500">24/7 emergency technical support</p>
                     </div>
                   </div>
@@ -146,20 +146,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-800">Headquarters</h3>
-                      {loadingSettings ? <p className="text-gray-500">Loading…</p> : renderAddress()}
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="bg-white/80 backdrop-blur-lg border-emerald-200 shadow-lg p-4">
-                  <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-500 rounded-2xl flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">Business Hours</h3>
-                      {loadingSettings ? <p className="text-gray-500">Loading…</p> : renderHours()}
-                      <p className="text-sm text-gray-500">Emergency support available 24/7</p>
+                      <p className="text-sm text-gray-500">123 Soteria St, Makati, Philippines</p>
                     </div>
                   </div>
                 </Card>
@@ -263,7 +250,7 @@ export default function ContactPage() {
                 <div>
                   <h3 className="font-semibold text-red-900 mb-2">Emergency Situations</h3>
                   <p className="text-red-800 mb-3">If you're experiencing a life-threatening emergency, call local emergency services immediately.</p>
-                  <p className="text-red-800">For urgent technical issues with your SOTERIA device during an emergency, call our 24/7 emergency support line: <strong>{settings?.emergency_phone ?? "—"}</strong></p>
+                  <p className="text-red-800">For urgent technical issues with your SOTERIA device during an emergency, call our 24/7 emergency support line: <strong>+639451458138</strong></p>
                 </div>
               </div>
             </CardContent>
