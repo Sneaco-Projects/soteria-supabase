@@ -122,7 +122,9 @@ export default function ArchitectDashboard() {
   const addDevice = async () => {
     try {
       const hw = newHwUid.trim();
+      const contact = newContact.trim();
       if (!hw) throw new Error("Device ID (HW UID) is required.");
+      if (!contact) throw new Error("Contact # (device SIM) is required for pairing instructions.");
       // Duplicate check
       const { data: existing, error: chkErr } = await supabase
         .from("devices").select("id").eq("hw_uid", hw).maybeSingle();
@@ -131,7 +133,7 @@ export default function ArchitectDashboard() {
 
       const { error } = await supabase.from("devices").insert({
         hw_uid: hw,
-        model: newContact.trim() || null, // store Contact # in model column
+        model: contact, // store Contact # in model column
         available: false,                 // start Unavailable
       });
       if (error) throw error;
@@ -365,8 +367,11 @@ export default function ArchitectDashboard() {
               <Input value={newHwUid} onChange={(e) => setNewHwUid(e.target.value)} placeholder="Enter device ID/IMEI…" />
             </div>
             <div>
-              <Label>Contact # (device SIM)</Label>
+              <Label>Contact # (device SIM) *</Label>
               <Input value={newContact} onChange={(e) => setNewContact(e.target.value)} placeholder="+63 9XX XXX XXXX" />
+              <p className="text-xs text-gray-500 mt-1">
+                This phone number will be shown to Wardens for SMS pairing instructions.
+              </p>
             </div>
           </div>
           <AlertDialogFooter>
