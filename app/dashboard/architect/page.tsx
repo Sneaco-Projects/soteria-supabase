@@ -133,8 +133,8 @@ export default function ArchitectDashboard() {
 
       const { error } = await supabase.from("devices").insert({
         hw_uid: hw,
-        model: contact, // store Contact # in model column
-        available: false,                 // start Unavailable
+        phone: contact, // store Contact # in proper phone column
+        available: false, // start Unavailable
       });
       if (error) throw error;
 
@@ -161,7 +161,7 @@ export default function ArchitectDashboard() {
         .from("devices")
         .update({
           hw_uid: editHwUid.trim(),
-          model: editContact.trim() || null, // contact #
+          phone: editContact.trim() || null, // contact #
         })
         .eq("id", editId);
       if (error) throw error;

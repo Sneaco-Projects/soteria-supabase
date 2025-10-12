@@ -336,7 +336,7 @@ export default function WardenDashboard() {
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [pairExpires, setPairExpires] = useState<string | null>(null);
   const [pairHwUid, setPairHwUid] = useState(""); // REQUIRED
-  const [pairContact, setPairContact] = useState<string | null>(null); // Contact # from devices.model
+  const [pairContact, setPairContact] = useState<string | null>(null); // Contact # from devices.phone
   const [pairLoading, setPairLoading] = useState(false);
 
   // feedback
@@ -553,13 +553,15 @@ export default function WardenDashboard() {
         const code = payload.code as string;
         const expires_at = payload.expires_at as string;
 
-        // Fetch device contact number (stored in devices.model)
-        const { data: dev } = await supabase
+        // Fetch device contact number (stored in devices.phone)
+        const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("model")
+          .select("hw_uid, phone")
           .eq("hw_uid", hwUid)
           .maybeSingle();
-        setPairContact(dev?.model ?? null);
+        
+        console.log("Device lookup:", { hwUid, dev, devError });
+        setPairContact(dev?.phone ?? null);
 
         setPairSentinelId(sentinelId);
         setPairHwUid(hwUid);
@@ -575,12 +577,14 @@ export default function WardenDashboard() {
         const code = payload.code as string;
         const expires_at = payload.expires_at as string;
 
-        const { data: dev } = await supabase
+        const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("model")
+          .select("hw_uid, phone")
           .eq("hw_uid", hwUid)
           .maybeSingle();
-        setPairContact(dev?.model ?? null);
+        
+        console.log("Device lookup (path 2):", { hwUid, dev, devError });
+        setPairContact(dev?.phone ?? null);
 
         setPairSentinelId(sentinelId);
         setPairHwUid(hwUid);
