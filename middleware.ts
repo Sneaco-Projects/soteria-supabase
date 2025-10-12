@@ -10,25 +10,37 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   // Public paths that don't need auth
-  const publicPaths = ["/", "/auth", "/api"];
+  const publicPaths = ["/", "/auth/signin", "/auth/signup", "/auth/forgot-password", "/auth/reset-password", "/api", "/about", "/contact", "/faq", "/features", "/how-it-works", "/pricing"];
   if (publicPaths.some((p) => path === p || path.startsWith(p))) {
     return res;
   }
 
   if (!session) {
-    const login = new URL("/login", req.url);
-    login.searchParams.set("redirect", path);
-    return NextResponse.redirect(login);
+    const signin = new URL("/auth/signin", req.url);
+    signin.searchParams.set("redirect", path);
+    return NextResponse.redirect(signin);
   }
 
-  // Look up user role
-  const { data: profile } = await supabase
+  // Look up user role with error handling
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", session.user.id)
     .maybeSingle();
 
-  const role = profile?.role; // "warden" | "provider" | "architect"
+  if (profileError) {
+    console.error("Profile lookup error:", profileError);
+    // Redirect to sign-in on profile error
+    return NextResponse.redirect(new URL("/auth/signin", req.url));
+  }
+
+  const role = profile?.role;
+  
+  // If no role found, create default profile and redirect to warden dashboard
+  if (!role) {
+    console.warn("No role found for user:", session.user.id);
+    return NextResponse.redirect(new URL("/dashboard/warden", req.url));
+  }
 
   // Redirect /dashboard to the user's role-specific dashboard
   if (path === "/dashboard") {
@@ -37,13 +49,22 @@ export async function middleware(req: NextRequest) {
 
   // Hard blocks by namespace - prevent role access to wrong dashboards
   if (path.startsWith("/dashboard/architect") && role !== "architect") {
-    return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
-  }
-  if (path.startsWith("/dashboard/warden") && role !== "warden") {
-    return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
+    console.log(`Blocking ${role} from accessing architect dashboard, redirecting to /dashboard/${role}`);
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, req.url));
   }
   if (path.startsWith("/dashboard/provider") && role !== "provider") {
-    return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
+    console.log(`Blocking ${role} from accessing provider dashboard, redirecting to /dashboard/${role}`);
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, req.url));
+  }
+  if (path.startsWith("/dashboard/warden") && role !== "warden") {
+    console.log(`Blocking ${role} from accessing warden dashboard, redirecting to /dashboard/${role}`);
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, req.url));
+  }
+
+  // Additional security: block any other dashboard paths
+  if (path.startsWith("/dashboard/") && !["architect", "provider", "warden"].includes(path.split("/")[2])) {
+    console.log(`Blocking access to unknown dashboard path: ${path}, redirecting to /dashboard/${role}`);
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, req.url));
   }
 
   return res;

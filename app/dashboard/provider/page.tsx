@@ -39,6 +39,31 @@ type DeviceEvent = {
 };
 
 export default function ProviderDashboard() {
+  // Role protection
+  useEffect(() => {
+    const checkAccess = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = "/auth/signin";
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile?.role !== "provider") {
+        console.log(`Access denied: ${profile?.role} cannot access provider dashboard`);
+        window.location.href = `/dashboard/${profile?.role ?? "warden"}`;
+        return;
+      }
+    };
+
+    checkAccess();
+  }, []);
+
   // UX
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);

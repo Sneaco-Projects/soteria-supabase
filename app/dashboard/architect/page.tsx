@@ -27,19 +27,28 @@ export default function ArchitectDashboard() {
 
   // ----- CLIENT GUARD (static-export friendly) -----
   useEffect(() => {
-    (async () => {
+    const checkAccess = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/login"); return; }
-      const { data: prof } = await supabase
+      if (!user) {
+        window.location.href = "/auth/signin";
+        return;
+      }
+
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
-      if (prof?.role !== "architect") {
-        router.replace(`/dashboard/${prof?.role ?? "warden"}`);
+
+      if (profile?.role !== "architect") {
+        console.log(`Access denied: ${profile?.role} cannot access architect dashboard`);
+        window.location.href = `/dashboard/${profile?.role ?? "warden"}`;
+        return;
       }
-    })();
-  }, [router]);
+    };
+
+    checkAccess();
+  }, []);
 
   // modals
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
