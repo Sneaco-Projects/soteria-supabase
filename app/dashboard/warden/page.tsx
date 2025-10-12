@@ -972,26 +972,6 @@ export default function WardenDashboard() {
       </AlertDialog>
     </div>
   );
-  User,
-  Phone,
-  StickyNote,
-  AlertTriangle,
-  CheckCircle,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-  Link as LinkIcon,
-  Search,
-  Loader2,
-  Copy as CopyIcon,
-  ActivitySquare,
-  MapPin,
-  X,
-  Bell,
-  ShieldAlert,
-  MessageSquareText,
-  Info,
-} from "lucide-react";
 
 /* ===================== Types & consts ===================== */
 
