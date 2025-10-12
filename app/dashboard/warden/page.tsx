@@ -548,18 +548,35 @@ export default function WardenDashboard() {
         // Fetch device contact number (stored in devices.phone)
         const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("hw_uid, phone, model")
+          .select("hw_uid, phone, model, available, sentinel_id")
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup:", { hwUid, dev, devError, phoneValue: dev?.phone, modelValue: dev?.model });
+        console.log("Device lookup FULL:", { 
+          hwUid, 
+          dev, 
+          devError, 
+          phoneValue: dev?.phone, 
+          modelValue: dev?.model,
+          available: dev?.available,
+          sentinel_id: dev?.sentinel_id,
+          errorMessage: devError?.message,
+          errorCode: devError?.code
+        });
         
         // Try phone field first, fallback to model field for backwards compatibility
         const contactNumber = dev?.phone || dev?.model || null;
         setPairContact(contactNumber);
         
-        if (!contactNumber) {
+        if (devError) {
+          console.error("Database error during device lookup:", devError);
+          setErrorMsg(`Database error: ${devError.message}`);
+        } else if (!dev) {
+          console.warn("Device not found:", hwUid);
+          setErrorMsg(`Device "${hwUid}" not found. Please check the Device ID or ask an Architect to add it.`);
+        } else if (!contactNumber) {
           console.warn("No contact number found for device:", hwUid, "Device data:", dev);
+          setErrorMsg(`Device "${hwUid}" found but has no phone number. Please ask an Architect to add the contact number.`);
         }
 
         setPairSentinelId(sentinelId);
@@ -578,18 +595,32 @@ export default function WardenDashboard() {
 
         const { data: dev, error: devError } = await supabase
           .from("devices")
-          .select("hw_uid, phone, model")
+          .select("hw_uid, phone, model, available, sentinel_id")
           .eq("hw_uid", hwUid)
           .maybeSingle();
         
-        console.log("Device lookup (path 2):", { hwUid, dev, devError, phoneValue: dev?.phone, modelValue: dev?.model });
+        console.log("Device lookup FULL (path 2):", { 
+          hwUid, 
+          dev, 
+          devError, 
+          phoneValue: dev?.phone, 
+          modelValue: dev?.model,
+          available: dev?.available,
+          sentinel_id: dev?.sentinel_id,
+          errorMessage: devError?.message,
+          errorCode: devError?.code
+        });
         
         // Try phone field first, fallback to model field for backwards compatibility
         const contactNumber = dev?.phone || dev?.model || null;
         setPairContact(contactNumber);
         
-        if (!contactNumber) {
-          console.warn("No contact number found for device:", hwUid, "Device data:", dev);
+        if (devError) {
+          console.error("Database error during device lookup (path 2):", devError);
+        } else if (!dev) {
+          console.warn("Device not found (path 2):", hwUid);
+        } else if (!contactNumber) {
+          console.warn("No contact number found for device (path 2):", hwUid, "Device data:", dev);
         }
 
         setPairSentinelId(sentinelId);
