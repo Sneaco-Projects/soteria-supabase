@@ -81,6 +81,951 @@ const PUBLIC_EVENTS_TABLE = "events";
 function categorize(e: DeviceEvent): LogCategory {
   switch (e.event_type) {
     case "BTN_SHORT":
+    case "BTN_LONG":
+      return "Button";
+    case "SOS":
+      return "SOS";
+    case "IN_SMS":
+      return "SMS";
+    case "PAIR_OK":
+    case "PAIR_FAIL":
+    case "UNPAIR_OK":
+    case "UNPAIR_DENY":
+    case "OTW":
+    case "AGPS_BOOST":
+    case "AGPS_STOP":
+    case "HEALTH":
+    case "DEVICE_ONLINE":
+    case "DEVICE_OFFLINE":
+    case "LOCATION_UPDATE":
+      return "System";
+    default:
+      return "All";
+  }
+}
+
+function prettyLabel(e: DeviceEvent): string {
+  const p = e.payload || {};
+  switch (e.event_type) {
+    case "PAIR_OK": return "✅ Device Successfully Connected";
+    case "PAIR_FAIL": return "❌ Device Connection Failed";
+    case "UNPAIR_OK": return "🔌 Device Disconnected by Guardian";
+    case "UNPAIR_DENY": return "⚠️ Device Disconnection Denied";
+    case "BTN_SHORT": return "🔘 Emergency Button Activated";
+    case "BTN_LONG": return "🔘 Emergency Button Held (Long Press)";
+    case "SOS": return "🆘 Emergency SOS Signal Sent";
+    case "OTW": return "🚗 Help is On The Way";
+    case "IN_SMS": return `📱 Text Message Received${p?.message ? `: "${String(p.message)}"` : ""}`;
+    case "AGPS_BOOST": return "🛰️ GPS Signal Boosting Active";
+    case "AGPS_STOP": return "🛰️ GPS Signal Boost Completed";
+    case "HEALTH": {
+      const healthMsg = p?.message || "";
+      if (healthMsg.toLowerCase().includes("battery")) return `🔋 Battery Status: ${healthMsg}`;
+      if (healthMsg.toLowerCase().includes("signal")) return `📶 Signal Status: ${healthMsg}`;
+      return `💓 Health Check: ${healthMsg}`.trim();
+    }
+    case "LOCATION_UPDATE": return "📍 Location Updated";
+    case "DEVICE_ONLINE": return "🟢 Device Came Online";
+    case "DEVICE_OFFLINE": return "🔴 Device Went Offline";
+    default: return `📊 ${e.event_type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}`;
+  }
+}
+
+function EventBadge({ e }: { e: DeviceEvent }) {
+  let Icon = Info;
+  let color = "text-zinc-700 bg-zinc-100 border-zinc-200";
+  switch (e.event_type) {
+    case "BTN_SHORT":
+    case "BTN_LONG":
+      Icon = Bell; color = "text-amber-800 bg-amber-50 border-amber-300 shadow-sm"; break;
+    case "SOS":
+      Icon = ShieldAlert; color = "text-red-800 bg-red-50 border-red-300 shadow-sm font-semibold"; break;
+    case "IN_SMS":
+      Icon = MessageSquareText; color = "text-blue-800 bg-blue-50 border-blue-300 shadow-sm"; break;
+    case "PAIR_OK":
+    case "UNPAIR_OK":
+      Icon = CheckCircle; color = "text-emerald-800 bg-emerald-50 border-emerald-300 shadow-sm"; break;
+    case "PAIR_FAIL":
+    case "UNPAIR_DENY":
+      Icon = AlertTriangle; color = "text-red-800 bg-red-50 border-red-300 shadow-sm"; break;
+    case "OTW":
+      Icon = CheckCircle; color = "text-green-800 bg-green-50 border-green-300 shadow-sm font-semibold"; break;
+    case "HEALTH":
+    case "AGPS_BOOST":
+    case "AGPS_STOP":
+      Icon = ActivitySquare; color = "text-purple-800 bg-purple-50 border-purple-300 shadow-sm"; break;
+    case "LOCATION_UPDATE":
+      Icon = MapPin; color = "text-teal-800 bg-teal-50 border-teal-300 shadow-sm"; break;
+    case "DEVICE_ONLINE":
+      Icon = CheckCircle; color = "text-emerald-800 bg-emerald-50 border-emerald-300 shadow-sm"; break;
+    case "DEVICE_OFFLINE":
+      Icon = AlertTriangle; color = "text-gray-800 bg-gray-50 border-gray-300 shadow-sm"; break;
+    default:
+      Icon = Info; color = "text-slate-800 bg-slate-50 border-slate-300 shadow-sm"; break;
+  }
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border ${color}`}>
+      <Icon className="h-3.5 w-3.5" />
+      <span className="font-medium">{e.event_type}</span>
+    </span>
+  );
+}
+
+/* Status dot: green = paired AND active within 5 minutes */
+function StatusDot({ green }: { green: boolean }) {
+  return (
+    <span
+      className={`inline-block h-2.5 w-2.5 rounded-full ${green ? "bg-emerald-500" : "bg-zinc-400"}`}
+      title={green ? "Online (paired & active)" : "Offline / Unpaired"}
+    />
+  );
+}
+
+export default function WardenDashboard() {
+  /* ----------------- Role Protection ----------------- */
+  useEffect(() => {
+    const checkAccess = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = "/auth/signin";
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile?.role !== "warden") {
+        console.log(`Access denied: ${profile?.role} cannot access warden dashboard`);
+        window.location.href = `/dashboard/${profile?.role ?? "warden"}`;
+        return;
+      }
+    };
+
+    checkAccess();
+  }, []);
+
+  /* ----------------- App State ----------------- */
+  const [sentinels, setSentinels] = useState<Sentinel[]>([]);
+  const [devices, setDevices] = useState<Record<string, DeviceRow>>({}); // device_id → {sentinel_id,last_seen_at}
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+
+  // CRUD
+  const [openAdd, setOpenAdd] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+  const addDisabled = !fullName.trim();
+
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  const [openDelete, setOpenDelete] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Pair flow
+  const [openPair, setOpenPair] = useState(false);
+  const [pairSentinelId, setPairSentinelId] = useState<string | null>(null);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairExpires, setPairExpires] = useState<string | null>(null);
+  const [pairHwUid, setPairHwUid] = useState("");
+  const [pairLoading, setPairLoading] = useState(false);
+
+  // feedback
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // events / feed
+  const [events, setEvents] = useState<DeviceEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsFilter, setEventsFilter] = useState<string>(""); // free-text
+  const [tab, setTab] = useState<LogCategory>("All");            // tabs
+
+  // pairing observers
+  const [pairedDeviceId, setPairedDeviceId] = useState<string | null>(null);
+  const [pairUsedAt, setPairUsedAt] = useState<string | null>(null);
+
+  // channels
+  const claimChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const pairOkChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const pairFailChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const deviceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const mountedRef = useRef(false);
+
+  /* ----------------- Load sentinels + device activity ----------------- */
+  const loadSentinels = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("sentinels")
+        .select("id, full_name, phone, notes, created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setSentinels(data ?? []);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to load sentinels.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // recent activity for green dots: fetch devices joined to these sentinels
+  const loadDeviceActivity = async () => {
+    if (!sentinels.length) { setDevices({}); return; }
+    const { data, error } = await supabase
+      .from("devices")
+      .select("id, sentinel_id, last_seen_at")
+      .in("sentinel_id", sentinels.map(s => s.id));
+    if (!error && data) {
+      const map: Record<string, DeviceRow> = {};
+      for (const d of data as any[]) map[d.id] = d as DeviceRow;
+      setDevices(map);
+    }
+  };
+
+  useEffect(() => {
+    loadSentinels();
+  }, []);
+  useEffect(() => {
+    if (sentinels.length) loadDeviceActivity();
+  }, [sentinels.length]);
+
+  const filteredSentinels = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sentinels;
+    return sentinels.filter((s) =>
+      [s.full_name, s.phone ?? "", s.notes ?? ""].some((v) => v.toLowerCase().includes(q))
+    );
+  }, [sentinels, query]);
+
+  /* ----------------- Sentinel CRUD ----------------- */
+  const addSentinel = async () => {
+    if (addDisabled) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in.");
+      const { error } = await supabase.from("sentinels").insert({
+        owner_guardian_id: user.id,
+        full_name: fullName.trim(),
+        phone: phone.trim() || null,
+        notes: notes.trim() || null,
+      });
+      if (error) throw error;
+      setOpenAdd(false);
+      setFullName(""); setPhone(""); setNotes("");
+      setSuccessMsg("Sentinel added.");
+      await loadSentinels();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to add sentinel.");
+    }
+  };
+  const openEditFor = (s: Sentinel) => {
+    setEditId(s.id); setEditName(s.full_name); setEditPhone(s.phone ?? ""); setEditNotes(s.notes ?? "");
+    setOpenEdit(true);
+  };
+  const updateSentinel = async () => {
+    if (!editId || !editName.trim()) { setErrorMsg(!editId ? "Nothing to update." : "Full name is required."); return; }
+    try {
+      const { error } = await supabase.from("sentinels").update({
+        full_name: editName.trim(),
+        phone: editPhone.trim() || null,
+        notes: editNotes.trim() || null,
+      }).eq("id", editId);
+      if (error) throw error;
+      setOpenEdit(false);
+      setSuccessMsg("Sentinel updated.");
+      await loadSentinels();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to update sentinel.");
+    }
+  };
+  const deleteSentinel = async () => {
+    if (!deleteId) return;
+    try {
+      const { error } = await supabase.from("sentinels").delete().eq("id", deleteId);
+      if (error) throw error;
+      setOpenDelete(false);
+      setSuccessMsg("Sentinel deleted.");
+      await loadSentinels();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to delete sentinel.");
+    }
+  };
+
+  /* ----------------- Pairing flow ----------------- */
+  const openPairDialog = (sentinelId: string) => {
+    setPairSentinelId(sentinelId);
+    setPairCode(null);
+    setPairExpires(null);
+    setPairHwUid("");
+    setOpenPair(true);
+  };
+  const generatePairCode = async () => {
+    if (!pairSentinelId) return;
+    setPairLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-claim`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+        },
+        body: JSON.stringify({ sentinel_id: pairSentinelId, hw_uid: pairHwUid.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = await res.json();
+      setPairCode(json.code);
+      setPairExpires(json.expires_at);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to generate pairing code.");
+    } finally {
+      setPairLoading(false);
+    }
+  };
+
+  /* ----------------- Real-time events ----------------- */
+  const filterEventLogs = (events: DeviceEvent[]) => {
+    if (!eventsFilter.trim()) return events;
+    const lc = eventsFilter.trim().toLowerCase();
+    return events.filter((e) => {
+      const label = prettyLabel(e).toLowerCase();
+      const payload = JSON.stringify(e.payload || {}).toLowerCase();
+      return label.includes(lc) || e.event_type.toLowerCase().includes(lc) || payload.includes(lc);
+    });
+  };
+  const categoryMatches = (e: DeviceEvent) => {
+    if (tab === "All") return true;
+    return categorize(e) === tab;
+  };
+  const displayedEvents = useMemo(() => {
+    const filtered = filterEventLogs(events);
+    return filtered.filter(categoryMatches).slice(0, 200);
+  }, [events, eventsFilter, tab]);
+
+  // Load events when component mounts
+  useEffect(() => {
+    (async () => {
+      if (!sentinels.length) { setEvents([]); setEventsLoading(false); return; }
+      setEventsLoading(true);
+      try {
+        const sentinelIds = sentinels.map(s => s.id);
+        const { data, error } = await supabase
+          .from(DEVICE_EVENTS_TABLE)
+          .select("id, created_at, device_id, sentinel_id, event_type, payload")
+          .in("sentinel_id", sentinelIds)
+          .order("created_at", { ascending: false })
+          .limit(500);
+        if (error) throw error;
+        setEvents((data ?? []) as DeviceEvent[]);
+      } catch (e: any) {
+        setErrorMsg(e?.message ?? "Failed to load events.");
+      } finally {
+        setEventsLoading(false);
+      }
+    })();
+  }, [sentinels.length]);
+
+  // Real-time subscriptions
+  useEffect(() => {
+    if (!sentinels.length) return;
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+
+    const sentinelIds = sentinels.map(s => s.id);
+    const IN = sentinelIds.length ? `in.(${sentinelIds.join(",")})` : "in.(00000000-0000-0000-0000-000000000000)";
+
+    // Events channel
+    const eventsChannel = supabase.channel("warden-events");
+    eventsChannel.on("postgres_changes", {
+      event: "INSERT", schema: "public", table: DEVICE_EVENTS_TABLE,
+      filter: `sentinel_id=${IN}`
+    }, (payload) => {
+      const e = payload.new as DeviceEvent;
+      setEvents(prev => [e, ...prev]);
+      if (e.event_type === "PAIR_OK") setSuccessMsg("Device paired successfully!");
+    });
+
+    // Device activity channel
+    const deviceChannel = supabase.channel("warden-device-activity");
+    deviceChannel.on("postgres_changes", {
+      event: "UPDATE", schema: "public", table: "devices",
+      filter: `sentinel_id=${IN}`
+    }, (payload) => {
+      const d = payload.new as any;
+      setDevices(prev => ({ ...prev, [d.id]: { id: d.id, sentinel_id: d.sentinel_id, last_seen_at: d.last_seen_at } }));
+    });
+
+    // Pairing observation
+    if (pairSentinelId && pairCode) {
+      const pairChannel = supabase.channel("pair-observation");
+      pairChannel.on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "device_claims",
+        filter: `sentinel_id=eq.${pairSentinelId}`
+      }, (payload) => {
+        const claim = payload.new as any;
+        if (claim.used_at) {
+          setPairUsedAt(claim.used_at);
+          // Look up device ID
+          (async () => {
+            const { data } = await supabase.from("devices").select("id").eq("hw_uid", claim.hw_uid).single();
+            if (data) setPairedDeviceId(data.id);
+          })();
+        }
+      });
+      pairChannel.subscribe();
+      pairOkChannelRef.current = pairChannel;
+    }
+
+    eventsChannel.subscribe();
+    deviceChannel.subscribe();
+    deviceChannelRef.current = deviceChannel;
+
+    return () => {
+      eventsChannel.unsubscribe();
+      deviceChannel.unsubscribe();
+      if (pairOkChannelRef.current) pairOkChannelRef.current.unsubscribe();
+    };
+  }, [sentinels.length, pairSentinelId, pairCode]);
+
+  return (
+    <div className="space-y-6">
+      {/* Error/Success modals */}
+      <AlertDialog open={!!errorMsg} onOpenChange={(open) => !open && setErrorMsg(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" /> Error
+            </AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-wrap">{errorMsg}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setErrorMsg(null)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!successMsg} onOpenChange={(open) => !open && setSuccessMsg(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-emerald-500" /> Success
+            </AlertDialogTitle>
+            <AlertDialogDescription>{successMsg}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setSuccessMsg(null)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Main content */}
+      <div className="space-y-6">
+        {/* Header with search and add */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Protected</h1>
+            <p className="text-gray-600">Manage your family members and their emergency devices</p>
+          </div>
+          <Button onClick={() => setOpenAdd(true)} className="bg-gradient-to-r from-emerald-500 to-teal-500">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Sentinel
+          </Button>
+        </div>
+
+        {/* Search */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search by name, phone, or notes..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {/* Sentinels grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+                  <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filteredSentinels.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <User className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No sentinels found</h3>
+              <p className="text-gray-600 mb-4">
+                {query.trim() ? "No sentinels match your search." : "Add your first family member to get started."}
+              </p>
+              {!query.trim() && (
+                <Button onClick={() => setOpenAdd(true)} className="bg-gradient-to-r from-emerald-500 to-teal-500">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Your First Sentinel
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredSentinels.map((s) => {
+              const deviceList = Object.values(devices).filter(d => d.sentinel_id === s.id);
+              const anyOnline = deviceList.some(d => d.last_seen_at && (Date.now() - Date.parse(d.last_seen_at)) < 5 * 60 * 1000);
+              return (
+                <Card key={s.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <User className="h-5 w-5 text-emerald-600" />
+                        <CardTitle className="text-lg">{s.full_name}</CardTitle>
+                        <StatusDot green={anyOnline} />
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditFor(s)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openPairDialog(s.id)}>
+                            <LinkIcon className="h-4 w-4 mr-2" />
+                            Pair Device
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => { setDeleteId(s.id); setOpenDelete(true); }}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {s.phone && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Phone className="h-4 w-4" />
+                        {s.phone}
+                      </div>
+                    )}
+                    {s.notes && (
+                      <div className="flex items-start gap-2 text-sm text-gray-600">
+                        <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+                        <span className="break-words">{s.notes}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs text-gray-500">
+                        {deviceList.length} device{deviceList.length !== 1 ? "s" : ""} paired
+                      </span>
+                      <Button 
+                        onClick={() => openPairDialog(s.id)} 
+                        size="sm" 
+                        variant="outline"
+                        className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                      >
+                        <LinkIcon className="h-3 w-3 mr-1" />
+                        Pair Device
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Events feed */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ActivitySquare className="h-5 w-5 text-emerald-600" />
+                  Recent Activity
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Live feed of all device events</p>
+              </div>
+              {eventsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Filter tabs */}
+            <div className="flex gap-1 border-b pb-2">
+              {(["All", "Button", "SOS", "SMS", "System"] as LogCategory[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    tab === t
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Search filter */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Filter by type/message/HW UID… (e.g. SOS, OTW, HEALTH)"
+                value={eventsFilter}
+                onChange={(e) => setEventsFilter(e.target.value)}
+                className="pl-10 text-sm"
+              />
+            </div>
+
+            {/* Events list */}
+            {eventsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="animate-pulse border rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-2 flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                      </div>
+                      <div className="h-3 bg-gray-200 rounded w-16"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : displayedEvents.length === 0 ? (
+              <div className="text-center py-8">
+                <ActivitySquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No events yet</h3>
+                <p className="text-gray-600">
+                  {eventsFilter.trim() || tab !== "All" ? "No events match your filters." : "Events from your devices will appear here."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {displayedEvents.map((e) => {
+                  const p = e.payload || {};
+                  const lat = Number(p.lat);
+                  const lng = Number(p.lng);
+                  const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+                  const msg = prettyLabel(e);
+                  const mapHref = hasLocation
+                    ? `https://maps.google.com/maps?q=${lat},${lng}` : null;
+
+                  return (
+                    <div key={e.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <EventBadge e={e} />
+                            <div className="text-xs text-gray-500">
+                              {new Date(e.created_at).toLocaleString()}
+                            </div>
+                          </div>
+
+                          <div className="text-sm font-medium text-gray-900 mb-1">
+                            {msg}
+                          </div>
+
+                          {hasLocation && (
+                            <div className="mt-2">
+                              <a
+                                className="inline-flex items-center gap-1 rounded-full border-2 border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition-colors shadow-sm"
+                                href={mapHref!}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`${lat?.toFixed(6)}, ${lng?.toFixed(6)}`}
+                              >
+                                <MapPin className="h-4 w-4" />
+                                📍 Open in Maps
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Add Sentinel Dialog */}
+      <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add New Sentinel</AlertDialogTitle>
+            <AlertDialogDescription>
+              Add a family member or person you want to protect with our emergency monitoring system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name *</Label>
+              <Input
+                id="fullName"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Enter full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Enter phone number"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Input
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Medical conditions, emergency contacts, etc."
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setOpenAdd(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addSentinel} disabled={addDisabled}>
+              Add Sentinel
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Sentinel Dialog */}
+      <AlertDialog open={openEdit} onOpenChange={setOpenEdit}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Sentinel Details</AlertDialogTitle>
+            <AlertDialogDescription>
+              Update the information for this protected person.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="editFullName">Full Name *</Label>
+              <Input
+                id="editFullName"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Enter full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editPhone">Phone Number</Label>
+              <Input
+                id="editPhone"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="Enter phone number"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editNotes">Notes</Label>
+              <Input
+                id="editNotes"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Medical conditions, emergency contacts, etc."
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setOpenEdit(false)}>
+              Cancel
+            </Button>
+            <Button onClick={updateSentinel}>
+              Save Changes
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Sentinel</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this sentinel? This will also unpair any associated devices. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setOpenDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteSentinel}>
+              Remove Sentinel
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Pairing Dialog */}
+      <AlertDialog open={openPair} onOpenChange={setOpenPair}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pair Emergency Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              Generate a pairing code to connect an emergency device to this sentinel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pairHwUid">Device Hardware ID (Optional)</Label>
+              <Input
+                id="pairHwUid"
+                value={pairHwUid}
+                onChange={(e) => setPairHwUid(e.target.value)}
+                placeholder="Leave blank for any device"
+              />
+            </div>
+            
+            {pairCode ? (
+              <div className="space-y-3">
+                <div className="text-center p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="text-xs text-emerald-600 uppercase tracking-wide font-semibold mb-1">
+                    Pairing Code
+                  </div>
+                  <div className="text-2xl font-mono font-bold text-emerald-800 tracking-wider">
+                    {pairCode}
+                  </div>
+                  <div className="text-xs text-emerald-600 mt-2">
+                    Expires: {pairExpires ? new Date(pairExpires).toLocaleString() : "Unknown"}
+                  </div>
+                </div>
+                
+                <Button
+                  onClick={() => navigator.clipboard.writeText(pairCode)}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <CopyIcon className="h-4 w-4 mr-2" />
+                  Copy Code
+                </Button>
+
+                {pairUsedAt && (
+                  <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                    <div className="text-sm font-semibold text-green-800">Successfully Paired!</div>
+                    <div className="text-xs text-green-600">
+                      Paired at: {new Date(pairUsedAt).toLocaleString()}
+                    </div>
+                    {pairedDeviceId && (
+                      <div className="text-xs text-green-600">
+                        Device ID: {pairedDeviceId}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Button onClick={generatePairCode} disabled={pairLoading} className="w-full">
+                {pairLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  "Generate Pairing Code"
+                )}
+              </Button>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setOpenPair(false)}>
+              Close
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+  User,
+  Phone,
+  StickyNote,
+  AlertTriangle,
+  CheckCircle,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Link as LinkIcon,
+  Search,
+  Loader2,
+  Copy as CopyIcon,
+  ActivitySquare,
+  MapPin,
+  X,
+  Bell,
+  ShieldAlert,
+  MessageSquareText,
+  Info,
+} from "lucide-react";
+
+/* ===================== Types & consts ===================== */
+
+export type Sentinel = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  notes: string | null;
+};
+
+type DeviceEvent = {
+  id: string | number;
+  created_at: string;
+  device_id?: string;
+  sentinel_id?: string | null;
+  event_type: string;
+  payload: any;
+};
+
+type DeviceRow = {
+  id: string;
+  sentinel_id: string | null;
+  last_seen_at: string | null;
+};
+
+type LogCategory = "All" | "Button" | "SOS" | "SMS" | "System";
+
+const DEVICE_EVENTS_TABLE = "device_events";
+const PUBLIC_EVENTS_TABLE = "events";
+
+/* Category helpers (filters + labels) */
+function categorize(e: DeviceEvent): LogCategory {
+  switch (e.event_type) {
+    case "BTN_SHORT":
       return "Button";
     case "SOS":
       return "SOS";
@@ -754,14 +1699,14 @@ export default function WardenDashboard() {
                               {mapHref && (
                                 <div className="mt-1">
                                   <a
-                                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-zinc-700 hover:bg-zinc-50"
+                                    className="inline-flex items-center gap-1 rounded-full border-2 border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition-colors shadow-sm"
                                     href={mapHref}
                                     target="_blank"
                                     rel="noreferrer"
                                     title={`${lat?.toFixed(6)}, ${lng?.toFixed(6)}`}
                                   >
-                                    <MapPin className="h-3.5 w-3.5" />
-                                    Open in Maps
+                                    <MapPin className="h-4 w-4" />
+                                    📍 Open in Maps
                                   </a>
                                 </div>
                               )}
