@@ -13,7 +13,16 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 
-import { AlertTriangle, CheckCircle, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Pencil, Trash2, Users, Plus, UserCheck, Smartphone, Crown, Shield } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger 
+} from "@/components/ui/dialog";
+import { 
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 
 /* ---------- Types ---------- */
 type RawOverview = {
@@ -37,6 +46,45 @@ type DeviceRow = {
   latest_event_type: string | null;
   available: boolean;
   assigned: boolean;
+};
+
+type WardenProfile = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+};
+
+type ProviderProfile = {
+  user_id: string;
+  display_name: string | null;
+  email: string;
+  active: boolean;
+};
+
+type WardenProviderAssignment = {
+  warden_id: string;
+  provider_id: string;
+  assigned_by: string;
+  assigned_at: string;
+  assignment_notes: string | null;
+  active: boolean;
+  warden_email: string;
+  warden_display_name: string | null;
+  provider_email: string;
+  provider_display_name: string | null;
+  provider_company_name: string | null;
+  warden_sentinel_count: number;
+};
+
+type UserProfile = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: 'warden' | 'provider' | 'architect';
+  created_at: string;
+  updated_at: string;
+  sentinel_count?: number;
 };
 
 export default function ArchitectDashboard() {
@@ -64,23 +112,53 @@ export default function ArchitectDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"devices" | "providers" | "users">("devices");
+
+  // Device management
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [search, setSearch] = useState("");
 
-  // Add modal
+  // Add device modal
   const [openAdd, setOpenAdd] = useState(false);
   const [newHwUid, setNewHwUid] = useState("");
   const [newContact, setNewContact] = useState("");
 
-  // Edit modal
+  // Edit device modal
   const [openEdit, setOpenEdit] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editHwUid, setEditHwUid] = useState("");
   const [editContact, setEditContact] = useState("");
 
-  // Delete modal
+  // Delete device modal
   const [openDelete, setOpenDelete] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Provider management
+  const [wardens, setWardens] = useState<WardenProfile[]>([]);
+  const [providers, setProviders] = useState<ProviderProfile[]>([]);
+  const [assignments, setAssignments] = useState<WardenProviderAssignment[]>([]);
+  const [providerSearch, setProviderSearch] = useState("");
+
+  // Add assignment modal
+  const [openAddAssignment, setOpenAddAssignment] = useState(false);
+  const [selectedWarden, setSelectedWarden] = useState<string>("");
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [assignmentNotes, setAssignmentNotes] = useState("");
+
+  // Remove assignment modal
+  const [openRemoveAssignment, setOpenRemoveAssignment] = useState(false);
+  const [removeAssignmentId, setRemoveAssignmentId] = useState<{warden_id: string, provider_id: string} | null>(null);
+
+  // User management
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserForPromotion, setSelectedUserForPromotion] = useState<UserProfile | null>(null);
+  
+  // Promote user modal
+  const [openPromoteUser, setOpenPromoteUser] = useState(false);
+  const [promotionRole, setPromotionRole] = useState<'provider' | 'architect'>('provider');
+  const [companyName, setCompanyName] = useState(""); // For provider promotion
 
   /* ---------- Data loaders ---------- */
   const normalize = (rows: RawOverview[]): DeviceRow[] =>
@@ -116,7 +194,184 @@ export default function ArchitectDashboard() {
     }
   };
 
-  useEffect(() => { loadDevices(); }, []);
+  const loadProviderData = async () => {
+    try {
+      // Load wardens
+      const { data: wardensData, error: wardensError } = await supabase
+        .from("profiles")
+        .select("id, email, display_name, created_at")
+        .eq("role", "warden")
+        .order("display_name");
+      if (wardensError) throw wardensError;
+      setWardens(wardensData ?? []);
+
+      // Load providers
+      const { data: providersData, error: providersError } = await supabase
+        .from("v_architect_warden_provider_assignments")
+        .select("*")
+        .order("warden_display_name");
+      if (providersError) {
+        // Fallback if view doesn't exist yet
+        const { data: providerProfiles, error: fallbackError } = await supabase
+          .from("profiles")
+          .select("id, email, display_name")
+          .eq("role", "provider")
+          .order("display_name");
+        if (fallbackError) throw fallbackError;
+        
+        const formattedProviders: ProviderProfile[] = (providerProfiles ?? []).map(p => ({
+          user_id: p.id,
+          display_name: p.display_name,
+          email: p.email || '',
+          active: true
+        }));
+        setProviders(formattedProviders);
+        setAssignments([]);
+      } else {
+        setAssignments(providersData ?? []);
+        
+        // Extract unique providers from assignments
+        const uniqueProviders = Array.from(
+          new Set((providersData ?? []).map(a => a.provider_id))
+        ).map(pid => {
+          const assignment = (providersData ?? []).find(a => a.provider_id === pid);
+          return {
+            user_id: pid,
+            display_name: assignment?.provider_company_name || assignment?.provider_display_name,
+            email: assignment?.provider_email || '',
+            active: true
+          } as ProviderProfile;
+        });
+        setProviders(uniqueProviders);
+      }
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to load provider data.");
+    }
+  };
+
+  const addAssignment = async () => {
+    try {
+      if (!selectedWarden || !selectedProvider) {
+        throw new Error("Please select both a warden and provider.");
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated.");
+
+      const { error } = await supabase
+        .from("warden_provider_assignments")
+        .insert({
+          warden_id: selectedWarden,
+          provider_id: selectedProvider,
+          assigned_by: user.id,
+          notes: assignmentNotes.trim() || null
+        });
+
+      if (error) throw error;
+
+      setSuccessMsg("Provider assigned to warden successfully.");
+      setOpenAddAssignment(false);
+      setSelectedWarden("");
+      setSelectedProvider("");
+      setAssignmentNotes("");
+      await loadProviderData();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to add assignment.");
+    }
+  };
+
+  const removeAssignment = async () => {
+    try {
+      if (!removeAssignmentId) return;
+
+      const { error } = await supabase
+        .from("warden_provider_assignments")
+        .update({ active: false })
+        .eq("warden_id", removeAssignmentId.warden_id)
+        .eq("provider_id", removeAssignmentId.provider_id);
+
+      if (error) throw error;
+
+      setSuccessMsg("Assignment removed successfully.");
+      setOpenRemoveAssignment(false);
+      setRemoveAssignmentId(null);
+      await loadProviderData();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to remove assignment.");
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const { data: usersData, error: usersError } = await supabase
+        .from("profiles")
+        .select(`
+          id, email, display_name, role, created_at, updated_at,
+          sentinels!owner_guardian_id(id)
+        `)
+        .order("created_at", { ascending: false });
+      
+      if (usersError) throw usersError;
+      
+      const formattedUsers: UserProfile[] = (usersData ?? []).map(user => ({
+        id: user.id,
+        email: user.email || '',
+        display_name: user.display_name,
+        role: user.role,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        sentinel_count: user.sentinels?.length || 0
+      }));
+      
+      setUsers(formattedUsers);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to load users.");
+    }
+  };
+
+  const promoteUser = async () => {
+    try {
+      if (!selectedUserForPromotion) throw new Error("No user selected.");
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated.");
+
+      // Update user role in profiles table
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ role: promotionRole })
+        .eq("id", selectedUserForPromotion.id);
+
+      if (profileError) throw profileError;
+
+      // If promoting to provider, create provider record
+      if (promotionRole === 'provider') {
+        const { error: providerError } = await supabase
+          .from("providers")
+          .upsert({
+            user_id: selectedUserForPromotion.id,
+            display_name: companyName.trim() || selectedUserForPromotion.display_name || 'Unnamed Provider',
+            active: true
+          });
+
+        if (providerError) throw providerError;
+      }
+
+      setSuccessMsg(`User promoted to ${promotionRole} successfully.`);
+      setOpenPromoteUser(false);
+      setSelectedUserForPromotion(null);
+      setCompanyName("");
+      await Promise.all([loadUsers(), loadProviderData()]);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to promote user.");
+    }
+  };
+
+  useEffect(() => { 
+    loadDevices(); 
+    loadProviderData();
+    loadUsers();
+  }, []);
 
   /* ---------- Actions ---------- */
   const addDevice = async () => {
@@ -254,31 +509,55 @@ export default function ArchitectDashboard() {
 
       {/* Page */}
       <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
-        <div className="relative z-10 p-6 max-w-6xl mx-auto">
+        <div className="relative z-10 p-6 max-w-7xl mx-auto">
           <Card className="bg-white/90 border-emerald-200 shadow-lg">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Device Inventory</CardTitle>
-                  <CardDescription>
-                    Add devices and mark them <b>Available</b> so Wardens can pair them.
-                  </CardDescription>
-                </div>
-                <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700">
-                  Add Device
-                </Button>
-              </div>
-              <div className="mt-4">
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search hw_uid, contact #, available/assigned…"
-                  className="bg-white/80"
-                />
-              </div>
+              <CardTitle>Architect Dashboard</CardTitle>
+              <CardDescription>
+                Manage devices and provider-warden assignments.
+              </CardDescription>
             </CardHeader>
+            
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "devices" | "providers" | "users")}>
+              <TabsList className="mx-6 mb-4">
+                <TabsTrigger value="devices" className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4" />
+                  Device Management
+                </TabsTrigger>
+                <TabsTrigger value="providers" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Provider Assignments
+                </TabsTrigger>
+                <TabsTrigger value="users" className="flex items-center gap-2">
+                  <Crown className="h-4 w-4" />
+                  User Management
+                </TabsTrigger>
+              </TabsList>
 
-            <CardContent className="space-y-3">
+              <TabsContent value="devices" className="mt-0">
+                <div className="px-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Device Inventory</h3>
+                      <p className="text-sm text-gray-600">
+                        Add devices and mark them <b>Available</b> so Wardens can pair them.
+                      </p>
+                    </div>
+                    <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                      Add Device
+                    </Button>
+                  </div>
+                  <div className="mb-4">
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search hw_uid, contact #, available/assigned…"
+                      className="bg-white/80"
+                    />
+                  </div>
+                </div>
+                
+                <CardContent className="px-6 pb-6 space-y-3">
               {filtered.map((d) => (
                 <Card key={d.id} className="border-emerald-100 bg-white/80">
                   <CardContent className="py-3">
@@ -347,7 +626,249 @@ export default function ArchitectDashboard() {
                   <CardContent className="py-6 text-gray-600">No devices match your search.</CardContent>
                 </Card>
               )}
-            </CardContent>
+                </CardContent>
+              </TabsContent>
+
+              <TabsContent value="providers" className="mt-0">
+                <div className="px-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Provider Assignments</h3>
+                      <p className="text-sm text-gray-600">
+                        Assign providers to wardens so they can monitor device activity.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => setOpenAddAssignment(true)} 
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Assignment
+                    </Button>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <Input
+                      value={providerSearch}
+                      onChange={(e) => setProviderSearch(e.target.value)}
+                      placeholder="Search assignments by warden or provider name..."
+                      className="bg-white/80"
+                    />
+                  </div>
+
+                  <div className="space-y-4 pb-6">
+                    {assignments
+                      .filter(a => 
+                        a.active && (
+                          a.warden_display_name?.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                          a.provider_display_name?.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                          a.provider_company_name?.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                          a.warden_email.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                          a.provider_email.toLowerCase().includes(providerSearch.toLowerCase())
+                        )
+                      )
+                      .map((assignment) => (
+                        <Card key={`${assignment.warden_id}-${assignment.provider_id}`} className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <UserCheck className="h-4 w-4 text-blue-600" />
+                                      <span className="font-medium text-sm">Warden</span>
+                                    </div>
+                                    <p className="text-sm font-semibold">{assignment.warden_display_name || 'Unnamed'}</p>
+                                    <p className="text-xs text-gray-600">{assignment.warden_email}</p>
+                                  </div>
+                                  <div className="mx-4 text-gray-400">→</div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4 text-emerald-600" />
+                                      <span className="font-medium text-sm">Provider</span>
+                                    </div>
+                                    <p className="text-sm font-semibold">
+                                      {assignment.provider_company_name || assignment.provider_display_name || 'Unnamed'}
+                                    </p>
+                                    <p className="text-xs text-gray-600">{assignment.provider_email}</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-4 text-xs text-gray-500">
+                                  <span>Assigned: {new Date(assignment.assigned_at).toLocaleDateString()}</span>
+                                  {assignment.warden_sentinel_count > 0 && (
+                                    <span>{assignment.warden_sentinel_count} sentinel(s)</span>
+                                  )}
+                                </div>
+                                
+                                {assignment.assignment_notes && (
+                                  <div className="bg-gray-50 p-2 rounded text-xs">
+                                    <span className="font-medium">Notes:</span> {assignment.assignment_notes}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => {
+                                  setRemoveAssignmentId({
+                                    warden_id: assignment.warden_id,
+                                    provider_id: assignment.provider_id
+                                  });
+                                  setOpenRemoveAssignment(true);
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+
+                    {assignments.filter(a => a.active).length === 0 && (
+                      <Card className="border-emerald-100 bg-white/70">
+                        <CardContent className="py-8 text-center text-gray-600">
+                          <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                          <p className="font-medium">No provider assignments</p>
+                          <p className="text-sm">Start by assigning a provider to a warden.</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="users" className="mt-0">
+                <div className="px-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">User Management</h3>
+                      <p className="text-sm text-gray-600">
+                        Promote registered wardens to provider or architect roles.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <Input
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search users by email or name..."
+                      className="bg-white/80"
+                    />
+                  </div>
+
+                  <div className="space-y-4 pb-6">
+                    {users
+                      .filter(user => 
+                        user.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+                        user.display_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+                        false
+                      )
+                      .map((user) => (
+                        <Card key={user.id} className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-4">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2">
+                                    {user.role === 'architect' && <Crown className="h-4 w-4 text-yellow-600" />}
+                                    {user.role === 'provider' && <Users className="h-4 w-4 text-emerald-600" />}
+                                    {user.role === 'warden' && <Shield className="h-4 w-4 text-blue-600" />}
+                                    <span className="font-medium text-sm capitalize">{user.role}</span>
+                                  </div>
+                                  <Badge 
+                                    variant={
+                                      user.role === 'architect' ? 'default' :
+                                      user.role === 'provider' ? 'secondary' : 'outline'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {user.role}
+                                  </Badge>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="font-medium">Name:</span>
+                                    <span className="text-gray-700">{user.display_name || 'Not set'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="font-medium">Email:</span>
+                                    <span className="text-gray-700">{user.email}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                                    <span>Registered: {new Date(user.created_at).toLocaleDateString()}</span>
+                                    {user.role === 'warden' && user.sentinel_count !== undefined && (
+                                      <span>{user.sentinel_count} sentinel(s)</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {user.role === 'warden' && (
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedUserForPromotion(user);
+                                      setPromotionRole('provider');
+                                      setOpenPromoteUser(true);
+                                    }}
+                                  >
+                                    <Users className="mr-2 h-4 w-4" />
+                                    Promote to Provider
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedUserForPromotion(user);
+                                      setPromotionRole('architect');
+                                      setOpenPromoteUser(true);
+                                    }}
+                                  >
+                                    <Crown className="mr-2 h-4 w-4" />
+                                    Promote to Architect
+                                  </Button>
+                                </div>
+                              )}
+                              
+                              {user.role !== 'warden' && (
+                                <div className="text-sm text-gray-500 italic">
+                                  Already promoted
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+
+                    {users.filter(u => 
+                      u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+                      u.display_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+                      false
+                    ).length === 0 && (
+                      <Card className="border-emerald-100 bg-white/70">
+                        <CardContent className="py-8 text-center text-gray-600">
+                          <Crown className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                          <p className="font-medium">No users found</p>
+                          <p className="text-sm">
+                            {userSearch ? 
+                              "No users match your search criteria." : 
+                              "No users have registered yet."
+                            }
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </Card>
         </div>
       </div>
@@ -424,6 +945,172 @@ export default function ArchitectDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add provider assignment */}
+      <Dialog open={openAddAssignment} onOpenChange={setOpenAddAssignment}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Provider to Warden</DialogTitle>
+            <DialogDescription>
+              Select a warden and provider to create a monitoring assignment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Warden</Label>
+              <Select value={selectedWarden} onValueChange={setSelectedWarden}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a warden" />
+                </SelectTrigger>
+                <SelectContent>
+                  {wardens.map((warden) => (
+                    <SelectItem key={warden.id} value={warden.id}>
+                      {warden.display_name || warden.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Provider</Label>
+              <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.filter(p => p.active).map((provider) => (
+                    <SelectItem key={provider.user_id} value={provider.user_id}>
+                      {provider.display_name || provider.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                value={assignmentNotes}
+                onChange={(e) => setAssignmentNotes(e.target.value)}
+                placeholder="Add any notes about this assignment..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setOpenAddAssignment(false);
+                setSelectedWarden("");
+                setSelectedProvider("");
+                setAssignmentNotes("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={addAssignment}>Assign</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove assignment confirmation */}
+      <AlertDialog open={openRemoveAssignment} onOpenChange={setOpenRemoveAssignment}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Assignment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the provider's access to monitor this warden's devices. This action can be reversed by creating a new assignment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setOpenRemoveAssignment(false)}>Cancel</Button>
+            <AlertDialogAction 
+              className="bg-red-600 hover:bg-red-700" 
+              onClick={removeAssignment}
+            >
+              Remove Assignment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Promote user modal */}
+      <Dialog open={openPromoteUser} onOpenChange={setOpenPromoteUser}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {promotionRole === 'provider' ? (
+                <Users className="h-5 w-5 text-emerald-600" />
+              ) : (
+                <Crown className="h-5 w-5 text-yellow-600" />
+              )}
+              Promote to {promotionRole === 'provider' ? 'Provider' : 'Architect'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUserForPromotion && (
+                <>
+                  Promote <strong>{selectedUserForPromotion.display_name || selectedUserForPromotion.email}</strong> from 
+                  warden to {promotionRole}. This will change their access permissions permanently.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-3 rounded">
+              <div className="text-sm">
+                <div><span className="font-medium">Current role:</span> Warden</div>
+                <div><span className="font-medium">New role:</span> {promotionRole === 'provider' ? 'Provider' : 'Architect'}</div>
+              </div>
+            </div>
+            
+            {promotionRole === 'provider' && (
+              <div>
+                <Label>Company/Organization Name</Label>
+                <Input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Enter company or organization name..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This will be displayed as the provider name in assignments.
+                </p>
+              </div>
+            )}
+            
+            {promotionRole === 'architect' && (
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium">Warning</p>
+                    <p>Architects have full system access including user management and device provisioning.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setOpenPromoteUser(false);
+                setSelectedUserForPromotion(null);
+                setCompanyName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={promoteUser}
+              className={promotionRole === 'architect' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-emerald-600 hover:bg-emerald-700'}
+            >
+              Promote to {promotionRole === 'provider' ? 'Provider' : 'Architect'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

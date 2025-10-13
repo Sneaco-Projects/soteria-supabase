@@ -8,6 +8,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,6 +39,25 @@ type DeviceEvent = {
   sentinel_id: string | null;
   event_type: string;
   payload: any;
+};
+
+type WardenDetails = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  registered_at: string;
+  sentinel_count: number;
+  device_count: number;
+  latest_activity: string | null;
+  sentinels: Array<{
+    id: string;
+    full_name: string;
+    phone: string | null;
+    notes: string | null;
+    created_at: string;
+    device_count: number;
+    latest_event: string | null;
+  }>;
 };
 
 export default function ProviderDashboard() {
@@ -84,6 +106,10 @@ export default function ProviderDashboard() {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [filterText, setFilterText] = useState("");
   const [focusedDeviceId, setFocusedDeviceId] = useState<string | null>(null);
+
+  // Warden details modal
+  const [selectedWardenDetails, setSelectedWardenDetails] = useState<WardenDetails | null>(null);
+  const [showWardenModal, setShowWardenModal] = useState(false);
   const deviceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const mountedRef = useRef(false);
 
@@ -104,47 +130,103 @@ export default function ProviderDashboard() {
   const loadAssignmentsBundle = async () => {
     setLoading(true);
     try {
-      // 1) Get my assignments (RLS returns only mine)
-      const { data: asg, error: aErr } = await supabase
-        .from("provider_assignments")
-        .select("provider_id, sentinel_id");
-      if (aErr) throw aErr;
-      setAssignments(asg ?? []);
+      // 1) Get my warden assignments using the new system
+      const { data: wardenAssignments, error: waErr } = await supabase
+        .from("v_provider_assigned_wardens")
+        .select("*");
+      
+      if (waErr) {
+        console.log("New warden assignments not available, falling back to old system");
+        // Fallback to old provider_assignments system
+        const { data: asg, error: aErr } = await supabase
+          .from("provider_assignments")
+          .select("provider_id, sentinel_id");
+        if (aErr) throw aErr;
+        setAssignments(asg ?? []);
 
-      const sentinelIds = Array.from(new Set((asg ?? []).map(a => a.sentinel_id)));
-      if (sentinelIds.length === 0) {
-        setSentinels([]); setDevices([]); setGuardianProfiles({});
+        const sentinelIds = Array.from(new Set((asg ?? []).map(a => a.sentinel_id)));
+        if (sentinelIds.length === 0) {
+          setSentinels([]); setDevices([]); setGuardianProfiles({});
+          return;
+        }
+
+        // Load sentinels and devices using old method
+        const { data: sens, error: sErr } = await supabase
+          .from("sentinels")
+          .select("id, full_name, phone, notes, owner_guardian_id")
+          .in("id", sentinelIds);
+        if (sErr) throw sErr;
+        setSentinels(sens ?? []);
+
+        const guardianIds = Array.from(new Set((sens ?? []).map(s => s.owner_guardian_id)));
+        const guardianMap: Record<string, Profile> = {};
+        if (guardianIds.length) {
+          const { data: gps, error: gErr } = await supabase
+            .from("profiles")
+            .select("id, email, display_name")
+            .in("id", guardianIds);
+          if (gErr) throw gErr;
+          (gps ?? []).forEach(g => guardianMap[g.id] = g);
+        }
+        setGuardianProfiles(guardianMap);
+
+        const { data: devs, error: dErr } = await supabase
+          .from("devices")
+          .select("id, hw_uid, model, sentinel_id, last_seen_at")
+          .in("sentinel_id", sentinelIds);
+        if (dErr) throw dErr;
+        setDevices(devs ?? []);
+        
         return;
       }
 
-      // 2) Sentinels
+      // New system: Get all sentinels owned by assigned wardens
+      const wardenIds = Array.from(new Set((wardenAssignments ?? []).map(w => w.warden_id)));
+      if (wardenIds.length === 0) {
+        setSentinels([]); setDevices([]); setGuardianProfiles({});
+        setAssignments([]);
+        return;
+      }
+
+      // Store warden info for display
+      const guardianMap: Record<string, Profile> = {};
+      (wardenAssignments ?? []).forEach(w => {
+        guardianMap[w.warden_id] = {
+          id: w.warden_id,
+          email: w.warden_email,
+          display_name: w.warden_display_name
+        };
+      });
+      setGuardianProfiles(guardianMap);
+
+      // Get all sentinels owned by these wardens
       const { data: sens, error: sErr } = await supabase
         .from("sentinels")
         .select("id, full_name, phone, notes, owner_guardian_id")
-        .in("id", sentinelIds);
+        .in("owner_guardian_id", wardenIds);
       if (sErr) throw sErr;
       setSentinels(sens ?? []);
 
-      // 3) Guardian profiles
-      const guardianIds = Array.from(new Set((sens ?? []).map(s => s.owner_guardian_id)));
-      const guardianMap: Record<string, Profile> = {};
-      if (guardianIds.length) {
-        const { data: gps, error: gErr } = await supabase
-          .from("profiles")
-          .select("id, email, display_name")
-          .in("id", guardianIds);
-        if (gErr) throw gErr;
-        (gps ?? []).forEach(g => guardianMap[g.id] = g);
-      }
-      setGuardianProfiles(guardianMap);
+      // Convert to old assignment format for compatibility
+      const assignments = (sens ?? []).map(s => ({
+        provider_id: (wardenAssignments ?? [])[0]?.provider_id || '',
+        sentinel_id: s.id
+      }));
+      setAssignments(assignments);
 
-      // 4) Devices
-      const { data: devs, error: dErr } = await supabase
-        .from("devices")
-        .select("id, hw_uid, model, sentinel_id, last_seen_at")
-        .in("sentinel_id", sentinelIds);
-      if (dErr) throw dErr;
-      setDevices(devs ?? []);
+      // Get devices for these sentinels
+      const sentinelIds = (sens ?? []).map(s => s.id);
+      if (sentinelIds.length > 0) {
+        const { data: devs, error: dErr } = await supabase
+          .from("devices")
+          .select("id, hw_uid, model, sentinel_id, last_seen_at")
+          .in("sentinel_id", sentinelIds);
+        if (dErr) throw dErr;
+        setDevices(devs ?? []);
+      } else {
+        setDevices([]);
+      }
+
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load assignments.");
     } finally {
@@ -177,6 +259,81 @@ const loadEvents = async (sentinelIds?: string[], deviceId?: string) => {
     setErrorMsg(e?.message ?? "Failed to load events.");
   } finally {
     setEventsLoading(false);
+  }
+};
+
+const loadWardenDetails = async (wardenId: string) => {
+  try {
+    // Get warden profile
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, email, display_name, created_at")
+      .eq("id", wardenId)
+      .single();
+    if (profileError) throw profileError;
+
+    // Get warden's sentinels with device counts
+    const { data: sentinelsData, error: sentinelsError } = await supabase
+      .from("sentinels")
+      .select(`
+        id, full_name, phone, notes, created_at,
+        devices!sentinel_id(id, last_seen_at)
+      `)
+      .eq("owner_guardian_id", wardenId);
+    if (sentinelsError) throw sentinelsError;
+
+    const sentinels = (sentinelsData || []).map(s => {
+      const deviceCount = s.devices?.length || 0;
+      const latestEvent = s.devices?.reduce((latest: string | null, d: any) => {
+        if (!latest || (d.last_seen_at && d.last_seen_at > latest)) {
+          return d.last_seen_at;
+        }
+        return latest;
+      }, null);
+
+      return {
+        id: s.id,
+        full_name: s.full_name,
+        phone: s.phone,
+        notes: s.notes,
+        created_at: s.created_at,
+        device_count: deviceCount,
+        latest_event: latestEvent
+      };
+    });
+
+    // Get latest activity across all devices
+    const sentinelIds = sentinels.map(s => s.id);
+    let latestActivity: string | null = null;
+    
+    if (sentinelIds.length > 0) {
+      const { data: recentEvents, error: eventsError } = await supabase
+        .from("device_events")
+        .select("created_at")
+        .in("sentinel_id", sentinelIds)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      
+      if (!eventsError && recentEvents && recentEvents.length > 0) {
+        latestActivity = recentEvents[0].created_at;
+      }
+    }
+
+    const wardenDetails: WardenDetails = {
+      id: profile.id,
+      email: profile.email || '',
+      display_name: profile.display_name,
+      registered_at: profile.created_at,
+      sentinel_count: sentinels.length,
+      device_count: sentinels.reduce((total, s) => total + s.device_count, 0),
+      latest_activity: latestActivity,
+      sentinels
+    };
+
+    setSelectedWardenDetails(wardenDetails);
+    setShowWardenModal(true);
+  } catch (e: any) {
+    setErrorMsg(e?.message ?? "Failed to load warden details.");
   }
 };
 
@@ -325,78 +482,125 @@ const startStream = (deviceId?: string) => {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="space-y-6">
         <TabsList className="bg-white/80 backdrop-blur-lg border border-emerald-200">
-          <TabsTrigger value="my-sentinels" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">My Sentinels</TabsTrigger>
+          <TabsTrigger value="my-sentinels" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">My Wardens</TabsTrigger>
           <TabsTrigger value="incidents"    className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Incidents</TabsTrigger>
           <TabsTrigger value="directory"    className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Directory</TabsTrigger>
         </TabsList>
 
-        {/* My Sentinels */}
+        {/* My Assigned Wardens */}
         <TabsContent value="my-sentinels">
           {loading ? (
             <div className="text-sm text-gray-600">Loading…</div>
-          ) : sentinels.length === 0 ? (
+          ) : Object.keys(guardianProfiles).length === 0 ? (
             <Card className="bg-white/90 border-emerald-200">
-              <CardContent className="py-6 text-gray-600">No sentinels assigned yet.</CardContent>
+              <CardContent className="py-8 text-center text-gray-600">
+                <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                <p className="font-medium">No wardens assigned</p>
+                <p className="text-sm">Ask an architect to assign wardens to your provider account.</p>
+              </CardContent>
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {sentinels.map(s => {
-                const devs = devicesBySentinel[s.id] ?? [];
-                const lastSeen = devs
+              {Object.values(guardianProfiles).map(warden => {
+                const wardenSentinels = sentinels.filter(s => s.owner_guardian_id === warden.id);
+                const wardenDevices = wardenSentinels.flatMap(s => devicesBySentinel[s.id] ?? []);
+                const lastSeen = wardenDevices
                   .map(d => d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0)
                   .reduce((a, b) => Math.max(a, b), 0);
 
                 return (
-                  <Card key={s.id} className="bg-white/90 border-emerald-200">
+                  <Card key={warden.id} className="bg-white/90 border-emerald-200">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-gray-800 flex items-center gap-2">
-                        <User className="h-5 w-5 text-emerald-700" /> {s.full_name}
+                        <Shield className="h-5 w-5 text-emerald-700" />
+                        {warden.display_name || 'Unnamed Warden'}
                       </CardTitle>
                       <CardDescription>
-                        Guardian: <span className="text-gray-800">{guardianLabel(s.owner_guardian_id)}</span>
+                        <span className="text-gray-800">{warden.email}</span>
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="grid gap-1 text-sm text-gray-700">
-                        <div><span className="text-gray-500">Phone:</span> {s.phone || "—"}</div>
-                        <div><span className="text-gray-500">Notes:</span> {s.notes || "—"}</div>
+                        <div className="flex items-center gap-4">
+                          <span><span className="text-gray-500">Sentinels:</span> {wardenSentinels.length}</span>
+                          <span><span className="text-gray-500">Devices:</span> {wardenDevices.length}</span>
+                        </div>
                         <div className="flex items-center gap-1 text-gray-600">
                           <Clock className="h-3.5 w-3.5" />
-                          Last seen: {lastSeen ? new Date(lastSeen).toLocaleString() : "—"}
+                          Last activity: {lastSeen ? new Date(lastSeen).toLocaleString() : "—"}
                         </div>
                       </div>
 
                       <div className="border rounded-md">
-                        <div className="px-3 py-2 text-xs text-gray-500 border-b">Devices</div>
-                        {devs.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-600">No devices.</div>
+                        <div className="px-3 py-2 text-xs text-gray-500 border-b">Recent Sentinels</div>
+                        {wardenSentinels.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-600">No sentinels yet.</div>
                         ) : (
-                          <ul className="divide-y">
-                            {devs.map(d => (
-                              <li key={d.id} className="px-3 py-2 text-sm flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Smartphone className="h-4 w-4 text-emerald-700" />
-                                  <div>
-                                    <div className="text-gray-800">dev <span className="font-mono">{d.id.slice(0,8)}…</span> {d.model ? `(${d.model})` : ""}</div>
-                                    <div className="text-xs text-gray-500">HW: {d.hw_uid || "—"}</div>
+                          <ul className="divide-y max-h-24 overflow-y-auto">
+                            {wardenSentinels.slice(0, 3).map(s => {
+                              const sentinelDevices = devicesBySentinel[s.id] ?? [];
+                              return (
+                                <li key={s.id} className="px-3 py-2 text-sm">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-4 w-4 text-blue-600" />
+                                      <div>
+                                        <div className="text-gray-800">{s.full_name}</div>
+                                        <div className="text-xs text-gray-500">{sentinelDevices.length} device(s)</div>
+                                      </div>
+                                    </div>
+                                    {sentinelDevices.length > 0 && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={async () => {
+                                          setFocusedDeviceId(sentinelDevices[0].id);
+                                          await loadEvents(undefined, sentinelDevices[0].id);
+                                          startStream(sentinelDevices[0].id);
+                                          setTab("incidents");
+                                        }}
+                                        title="View device logs"
+                                      >
+                                        Monitor
+                                      </Button>
+                                    )}
                                   </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={async () => {
-                                    setFocusedDeviceId(d.id);
-                                    await loadEvents(undefined, d.id);
-                                    startStream(d.id);
-                                    setTab("incidents");
-                                  }}
-                                  title="Open device log"
-                                >
-                                  View Log
-                                </Button>
+                                </li>
+                              );
+                            })}
+                            {wardenSentinels.length > 3 && (
+                              <li className="px-3 py-2 text-xs text-gray-500 text-center">
+                                +{wardenSentinels.length - 3} more sentinel(s)
                               </li>
-                            ))}
+                            )}
                           </ul>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => loadWardenDetails(warden.id)}
+                          className="flex-1"
+                        >
+                          <Stethoscope className="mr-2 h-4 w-4" />
+                          View Details
+                        </Button>
+                        {wardenDevices.length > 0 && (
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              setFocusedDeviceId(null);
+                              const sentinelIds = wardenSentinels.map(s => s.id);
+                              await loadEvents(sentinelIds);
+                              startStream();
+                              setTab("incidents");
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 flex-1"
+                          >
+                            Monitor All
+                          </Button>
                         )}
                       </div>
                     </CardContent>
@@ -571,6 +775,155 @@ const startStream = (deviceId?: string) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Warden Details Modal */}
+      <Dialog open={showWardenModal} onOpenChange={setShowWardenModal}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-emerald-600" />
+              Warden Details
+            </DialogTitle>
+            <DialogDescription>
+              Complete information about {selectedWardenDetails?.display_name || 'this warden'} and their managed sentinels.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedWardenDetails && (
+            <div className="space-y-6">
+              {/* Warden Overview */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Tile 
+                  icon={<User className="h-4 w-4" />}
+                  label="Display Name"
+                  value={selectedWardenDetails.display_name || 'Not set'}
+                />
+                <Tile 
+                  icon={<CheckCircle className="h-4 w-4" />}
+                  label="Email"
+                  value={selectedWardenDetails.email}
+                />
+                <Tile 
+                  icon={<Users className="h-4 w-4" />}
+                  label="Sentinels"
+                  value={selectedWardenDetails.sentinel_count.toString()}
+                />
+                <Tile 
+                  icon={<Smartphone className="h-4 w-4" />}
+                  label="Devices"
+                  value={selectedWardenDetails.device_count.toString()}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Tile 
+                  icon={<Clock className="h-4 w-4" />}
+                  label="Registered"
+                  value={new Date(selectedWardenDetails.registered_at).toLocaleDateString()}
+                />
+                <Tile 
+                  icon={<ActivitySquare className="h-4 w-4" />}
+                  label="Latest Activity"
+                  value={selectedWardenDetails.latest_activity ? 
+                    new Date(selectedWardenDetails.latest_activity).toLocaleString() : 
+                    'No recent activity'
+                  }
+                />
+              </div>
+
+              {/* Sentinels List */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Managed Sentinels ({selectedWardenDetails.sentinels.length})
+                </h4>
+                
+                {selectedWardenDetails.sentinels.length === 0 ? (
+                  <Card className="bg-gray-50">
+                    <CardContent className="py-8 text-center text-gray-600">
+                      <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>No sentinels registered yet</p>
+                      <p className="text-sm">This warden hasn't created any sentinels.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4">
+                    {selectedWardenDetails.sentinels.map((sentinel) => (
+                      <Card key={sentinel.id} className="bg-white border-gray-200">
+                        <CardContent className="py-4">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-blue-600" />
+                                <h5 className="font-medium">{sentinel.full_name}</h5>
+                              </div>
+                              
+                              <div className="grid md:grid-cols-2 gap-2 text-sm text-gray-600">
+                                <div>
+                                  <span className="font-medium">Phone:</span> {sentinel.phone || '—'}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Devices:</span> {sentinel.device_count}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Created:</span> {new Date(sentinel.created_at).toLocaleDateString()}
+                                </div>
+                                {sentinel.latest_event && (
+                                  <div>
+                                    <span className="font-medium">Last Activity:</span> {new Date(sentinel.latest_event).toLocaleString()}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {sentinel.notes && (
+                                <div className="bg-gray-50 p-2 rounded text-sm">
+                                  <span className="font-medium">Notes:</span> {sentinel.notes}
+                                </div>
+                              )}
+                            </div>
+                            
+                            {sentinel.device_count > 0 && (
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  const sentinelDevices = devices.filter(d => d.sentinel_id === sentinel.id);
+                                  if (sentinelDevices.length > 0) {
+                                    setFocusedDeviceId(sentinelDevices[0].id);
+                                    await loadEvents(undefined, sentinelDevices[0].id);
+                                    startStream(sentinelDevices[0].id);
+                                    setShowWardenModal(false);
+                                    setTab("incidents");
+                                  }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700"
+                              >
+                                <ActivitySquare className="mr-2 h-4 w-4" />
+                                Monitor
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowWardenModal(false);
+                setSelectedWardenDetails(null);
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
