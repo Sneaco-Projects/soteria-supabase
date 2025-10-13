@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ActivitySquare, AlertTriangle, CheckCircle, HeartPulse, ListFilter, MapPin,
-  Search, Shield, Siren, User, Users, Smartphone, Stethoscope, Clock, X
+  Search, Shield, Siren, User, Users, Smartphone, Stethoscope, Clock, X,
+  ShieldAlert, Bell, MessageSquareText, CheckCircle2, XCircle, Info
 } from "lucide-react";
 
 /** Tables:
@@ -814,54 +815,90 @@ const startStream = (deviceId?: string) => {
               ) : filteredEvents.length === 0 ? (
                 <div className="text-sm text-gray-600">No events right now.</div>
               ) : (
-                <div className="space-y-2">
-                  {filteredEvents.slice(0, 400).map((e) => {
-                    const payload = e.payload || {};
-                    const msg = typeof payload.message === "string" ? payload.message : "";
-                    const lat = typeof payload.lat === "number" ? payload.lat : undefined;
-                    const lng = typeof payload.lng === "number" ? payload.lng : undefined;
-                    const mapHref = lat !== undefined && lng !== undefined
-                      ? `https://maps.google.com/maps?q=${lat},${lng}` : null;
+                (() => {
+                  // Compact health events and group by day
+                  const compacted = compactHealth(filteredEvents.slice(0, 400));
+                  const grouped: Record<string, typeof compacted> = {};
+                  for (const e of compacted) {
+                    const day = dayLabel(new Date(e.created_at));
+                    grouped[day] = grouped[day] || [];
+                    grouped[day].push(e);
+                  }
 
-                    return (
-                      <div key={String(e.id)} className="rounded-md border p-3 bg-white/80 text-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className={cn("px-2 py-0.5 rounded border text-xs", chip(e.event_type))}>
-                              {e.event_type}
-                            </span>
-                            <span className="text-xs text-gray-500">{new Date(e.created_at).toLocaleString()}</span>
-                            <span className="text-[11px] text-gray-500">• dev <span className="font-mono">{e.device_id.slice(0,8)}…</span></span>
+                  return (
+                    <div className="space-y-4">
+                      {Object.entries(grouped).map(([day, events]) => (
+                        <div key={day}>
+                          <div className="text-xs font-semibold text-gray-500 mb-2">{day}</div>
+                          <div className="space-y-1">
+                            {events.map((e) => {
+                              const meta = getEventMeta(e);
+                              const Icon = meta.Icon;
+                              const sentinelName = sentinels.find(s => s.id === e.sentinel_id)?.full_name || `Sentinel ${e.sentinel_id?.slice(0, 8)}`;
+                              
+                              return (
+                                <div
+                                  key={String(e.id)}
+                                  className={cn(
+                                    "rounded-lg p-3 text-sm transition-colors border-l-4",
+                                    toneClasses[meta.tone],
+                                    meta.tone === "danger" && "border-l-red-400",
+                                    meta.tone === "warn" && "border-l-amber-400", 
+                                    meta.tone === "success" && "border-l-emerald-500",
+                                    meta.tone === "info" && "border-l-sky-500",
+                                    meta.tone === "muted" && "border-l-zinc-300"
+                                  )}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div
+                                      className={cn(
+                                        "flex items-center justify-center w-6 h-6 rounded-full",
+                                        meta.tone === "danger" && "bg-red-100",
+                                        meta.tone === "warn" && "bg-amber-100", 
+                                        meta.tone === "success" && "bg-emerald-100",
+                                        meta.tone === "info" && "bg-sky-100",
+                                        meta.tone === "muted" && "bg-zinc-100"
+                                      )}
+                                    >
+                                      <Icon className={cn(
+                                        "h-3.5 w-3.5",
+                                        meta.tone === "danger" && "text-red-600",
+                                        meta.tone === "warn" && "text-amber-600", 
+                                        meta.tone === "success" && "text-emerald-600",
+                                        meta.tone === "info" && "text-sky-600",
+                                        meta.tone === "muted" && "text-zinc-600"
+                                      )} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-gray-900">
+                                            {prettyLabel(e)}
+                                          </span>
+                                          {e._count && e._count > 1 && (
+                                            <span className="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded-full">
+                                              {e._count}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                          <span>{sentinelName}</span>
+                                          <span>•</span>
+                                          <span>{new Date(e.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                      </div>
+                                      <PrettyPayload e={e} />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                          {mapHref && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <MapPin className="h-3.5 w-3.5" />
-                              <a href={mapHref} target="_blank" className="text-emerald-700 hover:underline">
-                                {lat?.toFixed(6)},{lng?.toFixed(6)}
-                              </a>
-                            </div>
-                          )}
                         </div>
-
-                        {/* brief */}
-                        <div className="mt-1 text-gray-800">{msg || <span className="text-gray-500">—</span>}</div>
-
-                        {/* vitals (if present) */}
-                        <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                          {"hr" in payload && <Tile icon={<HeartPulse className="h-3.5 w-3.5" />} label="Heart rate" value={`${payload.hr} bpm`} />}
-                          {"spo2" in payload && <Tile icon={<Stethoscope className="h-3.5 w-3.5" />} label="SpO₂" value={`${payload.spo2}%`} />}
-                          {"battery" in payload && <Tile icon={<ActivitySquare className="h-3.5 w-3.5" />} label="Battery" value={`${payload.battery}%`} />}
-                          {"temp" in payload && <Tile icon={<span className="inline-block w-3.5 h-3.5 rounded-full border" />} label="Temp" value={`${payload.temp}°`} />}
-                        </div>
-
-                        {/* full JSON */}
-                        <pre className="mt-2 text-xs bg-zinc-50 border rounded p-2 overflow-auto">
-{JSON.stringify(payload, null, 2)}
-                        </pre>
-                      </div>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  );
+                })()
               )}
             </CardContent>
           </Card>
@@ -1084,6 +1121,56 @@ function Tile({ icon, label, value }: { icon: React.ReactNode; label: string; va
     <div className="rounded border p-2 bg-white/70">
       <div className="text-gray-500 flex items-center gap-1">{icon} {label}</div>
       <div className="text-gray-800">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * PrettyPayload: renders the payload of an event in a more readable way
+ */
+function PrettyPayload({ e }: { e: DeviceEvent }) {
+  const p = e.payload || {};
+  const showPayload = Object.keys(p).length > 0;
+
+  if (!showPayload) return null;
+
+  return (
+    <div className="pl-7 pt-1">
+      <div className="text-xs text-muted-foreground space-y-1">
+        {p.message && (
+          <div className="font-medium text-gray-700">
+            💬 {String(p.message)}
+          </div>
+        )}
+        {(p.lat || p.lon) && (
+          <div className="flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {p.lat && p.lon
+              ? `${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}`
+              : p.lat || p.lon}
+          </div>
+        )}
+        {p.battery && (
+          <div className="flex items-center gap-1">
+            ⚡ {p.battery}%
+          </div>
+        )}
+        {p.network && (
+          <div className="flex items-center gap-1">
+            📶 {String(p.network)}
+          </div>
+        )}
+        {p.rssi && (
+          <div className="flex items-center gap-1">
+            📡 {String(p.rssi)} dBm
+          </div>
+        )}
+        {p.temp && (
+          <div className="flex items-center gap-1">
+            🌡️ {String(p.temp)}°C
+          </div>
+        )}
+      </div>
     </div>
   );
 }
