@@ -266,7 +266,7 @@ const loadWardenDetails = async (wardenId: string) => {
   try {
     console.log("Loading warden details for:", wardenId);
     
-    // Get warden profile
+    // Get warden profile (basic user info)
     console.log("Step 1: Loading warden profile...");
     const { data: profileArray, error: profileError } = await supabase
       .from("profiles")
@@ -276,8 +276,24 @@ const loadWardenDetails = async (wardenId: string) => {
     console.log("Profile query result:", { profileArray, profileError });
     if (profileError) throw profileError;
     
-    const profile = profileArray?.[0];
-    if (!profile) throw new Error("Warden profile not found");
+    // Use the warden info we have from the assignments if profile not found
+    let profile = profileArray?.[0];
+    
+    if (!profile) {
+      console.log("Warden profile not found in profiles table, using assignment data");
+      // Get warden info from our existing wardenProfiles data
+      const wardenFromAssignment = wardenProfiles[wardenId];
+      if (wardenFromAssignment) {
+        profile = {
+          id: wardenId,
+          email: wardenFromAssignment.email || "No email",
+          display_name: wardenFromAssignment.display_name || "Unknown Warden",
+          created_at: new Date().toISOString()
+        };
+      } else {
+        throw new Error(`No warden data found for ID: ${wardenId}`);
+      }
+    }
 
     // Get warden's sentinels
     console.log("Step 2: Loading warden's sentinels...");
@@ -872,8 +888,8 @@ const startStream = (deviceId?: string) => {
                   <Card className="bg-gray-50">
                     <CardContent className="py-8 text-center text-gray-600">
                       <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                      <p>No sentinels registered yet</p>
-                      <p className="text-sm">This warden hasn't created any sentinels.</p>
+                      <p>(No sentinel)</p>
+                      <p className="text-sm">This warden hasn't paired with any sentinels yet.</p>
                     </CardContent>
                   </Card>
                 ) : (
