@@ -284,10 +284,20 @@ const loadWardenDetails = async (wardenId: string) => {
       // Get warden info from our existing wardenProfiles data
       const wardenFromAssignment = wardenProfiles[wardenId];
       if (wardenFromAssignment) {
+        // Use display_name from assignment, or create one from email
+        let displayName = wardenFromAssignment.display_name;
+        if (!displayName || displayName.trim() === '') {
+          // Create display name from email if not available
+          const email = wardenFromAssignment.email || '';
+          displayName = email.split('@')[0] || 'Warden';
+          // Capitalize first letter
+          displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        }
+        
         profile = {
           id: wardenId,
           email: wardenFromAssignment.email || "No email",
-          display_name: wardenFromAssignment.display_name || "Unknown Warden",
+          display_name: displayName,
           created_at: new Date().toISOString()
         };
       } else {
