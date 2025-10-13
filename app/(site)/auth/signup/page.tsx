@@ -58,13 +58,32 @@ export default function SignUpForm() {
     }
 
     let role = profileData?.role ?? "warden";
+    
+    // Debug: Log the role information
+    console.log("Raw role from database:", role, typeof role);
+    console.log("Profile data:", profileData);
+    
     // Handle legacy "guardian" role
     if (role === "guardian") role = "warden";
     
-    if (role === "architect") router.push("/dashboard/architect");
-    else if (role === "provider") router.push("/dashboard/provider");
-    else if (role === "warden") router.push("/dashboard/warden");
-    else router.push("/dashboard/warden"); // Default fallback
+    console.log("Final role after conversion:", role);
+    
+    if (role === "architect") {
+      console.log("Redirecting to architect dashboard");
+      router.push("/dashboard/architect");
+    }
+    else if (role === "provider") {
+      console.log("Redirecting to provider dashboard");
+      router.push("/dashboard/provider");
+    }
+    else if (role === "warden") {
+      console.log("Redirecting to warden dashboard");
+      router.push("/dashboard/warden");
+    }
+    else {
+      console.log("Unknown role, defaulting to warden dashboard:", role);
+      router.push("/dashboard/warden"); // Default fallback
+    }
   };
 
   // Password rules + live checklist
