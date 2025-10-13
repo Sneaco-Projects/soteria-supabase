@@ -9,12 +9,12 @@ import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase-client";
 
-type Role = "architect" | "provider" | "warden" | null;
+type Role = "architect" | "provider" | "warden" | "guardian" | null;
 
 function getDashboardPath(role: Role) {
   if (role === "architect") return "/dashboard/architect";
   if (role === "provider") return "/dashboard/provider";
-  if (role === "warden") return "/dashboard/warden";
+  if (role === "warden" || role === "guardian") return "/dashboard/warden"; // Handle legacy guardian role
   return "/dashboard/warden"; // Default fallback
 }
 
@@ -51,7 +51,13 @@ export default function Navbar() {
           .maybeSingle();
 
         if (!mounted) return;
-        setRole((prof?.role as Role) ?? "warden");
+        
+        let userRole = (prof?.role as Role) ?? "warden";
+        // Handle legacy "guardian" role
+        if (userRole === "guardian") {
+          userRole = "warden";
+        }
+        setRole(userRole);
       } catch {
         // swallow — show signed-out state on error
         if (mounted) {

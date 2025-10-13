@@ -34,7 +34,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/auth/signin", req.url));
   }
 
-  const role = profile?.role;
+  let role = profile?.role;
+  
+  // Handle legacy "guardian" role by treating it as "warden"
+  if (role === "guardian") {
+    role = "warden";
+    console.log(`Converting legacy guardian role to warden for user: ${session.user.id}`);
+  }
   
   // If no role found, create default profile and redirect to warden dashboard
   if (!role) {

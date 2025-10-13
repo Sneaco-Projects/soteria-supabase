@@ -7,7 +7,7 @@ async function currentUserId() {
   return data.user.id;
 }
 
-export async function getGuardianSentinelIds(): Promise<string[]> {
+export async function getWardenSentinelIds(): Promise<string[]> {
   const uid = await currentUserId();
   const { data, error } = await supabase
     .from('sentinels')
@@ -15,6 +15,11 @@ export async function getGuardianSentinelIds(): Promise<string[]> {
     .eq('owner_guardian_id', uid);
   if (error) throw error;
   return (data ?? []).map(r => r.id);
+}
+
+// Keep the old function for backward compatibility
+export async function getGuardianSentinelIds(): Promise<string[]> {
+  return getWardenSentinelIds();
 }
 
 export async function getProviderSentinelIds(): Promise<string[]> {

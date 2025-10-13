@@ -1,10 +1,10 @@
 // hooks/useWardenData.ts
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getGuardianSentinelIds, getProviderSentinelIds } from '@/data/scope';
+import { getWardenSentinelIds, getProviderSentinelIds } from '@/data/scope';
 import { fetchDevicesForSentinels, fetchLatestEvents, type DeviceRow, type EventRow } from '@/data/queries';
 import { subscribeRealtime } from '@/data/realtime';
 
-type Role = 'guardian' | 'provider';
+type Role = 'warden' | 'provider';
 
 export function useWardenData(role: Role) {
   const [loading, setLoading] = useState(true);
@@ -20,8 +20,8 @@ export function useWardenData(role: Role) {
       setLoading(true);
 
       const sentinelIds =
-        role === 'guardian'
-          ? await getGuardianSentinelIds()
+        role === 'warden'
+          ? await getWardenSentinelIds()
           : await getProviderSentinelIds();
 
       const ds = await fetchDevicesForSentinels(sentinelIds);

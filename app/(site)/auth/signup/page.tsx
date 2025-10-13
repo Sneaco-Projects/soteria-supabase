@@ -57,7 +57,10 @@ export default function SignUpForm() {
       });
     }
 
-    const role = profileData?.role ?? "warden";
+    let role = profileData?.role ?? "warden";
+    // Handle legacy "guardian" role
+    if (role === "guardian") role = "warden";
+    
     if (role === "architect") router.push("/dashboard/architect");
     else if (role === "provider") router.push("/dashboard/provider");
     else if (role === "warden") router.push("/dashboard/warden");
