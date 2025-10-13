@@ -264,25 +264,36 @@ const loadEvents = async (sentinelIds?: string[], deviceId?: string) => {
 
 const loadWardenDetails = async (wardenId: string) => {
   try {
+    console.log("Loading warden details for:", wardenId);
+    
     // Get warden profile
-    const { data: profile, error: profileError } = await supabase
+    console.log("Step 1: Loading warden profile...");
+    const { data: profileArray, error: profileError } = await supabase
       .from("profiles")
       .select("id, email, display_name, created_at")
-      .eq("id", wardenId)
-      .single();
+      .eq("id", wardenId);
+    
+    console.log("Profile query result:", { profileArray, profileError });
     if (profileError) throw profileError;
+    
+    const profile = profileArray?.[0];
+    if (!profile) throw new Error("Warden profile not found");
 
     // Get warden's sentinels
+    console.log("Step 2: Loading warden's sentinels...");
     const { data: sentinelsData, error: sentinelsError } = await supabase
       .from("sentinels")
       .select("id, full_name, phone, notes, created_at")
       .eq("owner_guardian_id", wardenId);
+      
+    console.log("Sentinels query result:", { sentinelsData, sentinelsError });
     if (sentinelsError) throw sentinelsError;
 
     // Get devices for these sentinels separately to avoid join issues
     const sentinelIds = (sentinelsData || []).map(s => s.id);
     let devicesData: any[] = [];
     
+    console.log("Step 3: Loading devices for sentinels:", sentinelIds);
     if (sentinelIds.length > 0) {
       const { data: devices, error: devicesError } = await supabase
         .from("devices")
@@ -346,9 +357,12 @@ const loadWardenDetails = async (wardenId: string) => {
       sentinels
     };
 
+    console.log("Final warden details:", wardenDetails);
     setSelectedWardenDetails(wardenDetails);
     setShowWardenModal(true);
   } catch (e: any) {
+    console.error("Error in loadWardenDetails:", e);
+    console.error("Error details:", e?.details, e?.hint, e?.code);
     setErrorMsg(e?.message ?? "Failed to load warden details.");
   }
 };
