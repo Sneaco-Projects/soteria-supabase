@@ -205,44 +205,85 @@ export default function ArchitectDashboard() {
       if (wardensError) throw wardensError;
       setWardens(wardensData ?? []);
 
-      // Load providers
-      const { data: providersData, error: providersError } = await supabase
-        .from("v_architect_warden_provider_assignments")
-        .select("*")
-        .order("warden_display_name");
-      if (providersError) {
-        // Fallback if view doesn't exist yet
-        const { data: providerProfiles, error: fallbackError } = await supabase
+      // Load all providers - simplified approach
+      const { data: providerProfiles, error: providersError } = await supabase
+        .from("profiles")
+        .select("id, email, display_name")
+        .eq("role", "provider")
+        .order("display_name");
+      
+      if (providersError) throw providersError;
+
+      // Get provider details from providers table
+      let providerDetails: Record<string, any> = {};
+      if ((providerProfiles ?? []).length > 0) {
+        const providerIds = (providerProfiles ?? []).map(p => p.id);
+        const { data: providerData, error: providerDetailError } = await supabase
+          .from("providers")
+          .select("user_id, display_name, active")
+          .in("user_id", providerIds);
+
+        if (!providerDetailError && providerData) {
+          providerData.forEach(p => {
+            providerDetails[p.user_id] = p;
+          });
+        }
+      }
+      
+      const formattedProviders: ProviderProfile[] = (providerProfiles ?? []).map(p => ({
+        user_id: p.id,
+        display_name: providerDetails[p.id]?.display_name || p.display_name || 'Unnamed Provider',
+        email: p.email || '',
+        active: providerDetails[p.id]?.active ?? true
+      }));
+      setProviders(formattedProviders);
+
+      // Load existing assignments - simplified
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from("warden_provider_assignments")
+        .select("warden_id, provider_id, assigned_by, created_at, notes, active")
+        .eq("active", true);
+
+      if (!assignmentsError && assignmentsData) {
+        // Get additional details for assignments
+        const wardenIds = [...new Set(assignmentsData.map(a => a.warden_id))];
+        const providerIds = [...new Set(assignmentsData.map(a => a.provider_id))];
+
+        // Get warden details
+        const { data: wardenDetails } = await supabase
           .from("profiles")
           .select("id, email, display_name")
-          .eq("role", "provider")
-          .order("display_name");
-        if (fallbackError) throw fallbackError;
-        
-        const formattedProviders: ProviderProfile[] = (providerProfiles ?? []).map(p => ({
-          user_id: p.id,
-          display_name: p.display_name,
-          email: p.email || '',
-          active: true
+          .in("id", wardenIds);
+
+        // Get provider details
+        const { data: providerDetailsForAssignments } = await supabase
+          .from("profiles")
+          .select("id, email, display_name")
+          .in("id", providerIds);
+
+        const wardenMap: Record<string, any> = {};
+        const providerMap: Record<string, any> = {};
+
+        (wardenDetails ?? []).forEach(w => wardenMap[w.id] = w);
+        (providerDetailsForAssignments ?? []).forEach(p => providerMap[p.id] = p);
+
+        const formattedAssignments: WardenProviderAssignment[] = assignmentsData.map(a => ({
+          warden_id: a.warden_id,
+          provider_id: a.provider_id,
+          assigned_by: a.assigned_by,
+          assigned_at: a.created_at,
+          assignment_notes: a.notes,
+          active: a.active,
+          warden_email: wardenMap[a.warden_id]?.email || '',
+          warden_display_name: wardenMap[a.warden_id]?.display_name,
+          provider_email: providerMap[a.provider_id]?.email || '',
+          provider_display_name: providerMap[a.provider_id]?.display_name,
+          provider_company_name: providerDetails[a.provider_id]?.display_name,
+          warden_sentinel_count: 0 // Will be calculated separately if needed
         }));
-        setProviders(formattedProviders);
-        setAssignments([]);
+        setAssignments(formattedAssignments);
       } else {
-        setAssignments(providersData ?? []);
-        
-        // Extract unique providers from assignments
-        const uniqueProviders = Array.from(
-          new Set((providersData ?? []).map(a => a.provider_id))
-        ).map(pid => {
-          const assignment = (providersData ?? []).find(a => a.provider_id === pid);
-          return {
-            user_id: pid,
-            display_name: assignment?.provider_company_name || assignment?.provider_display_name,
-            email: assignment?.provider_email || '',
-            active: true
-          } as ProviderProfile;
-        });
-        setProviders(uniqueProviders);
+        setAssignments([]);
       }
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Failed to load provider data.");
@@ -303,15 +344,32 @@ export default function ArchitectDashboard() {
 
   const loadUsers = async () => {
     try {
+      // First get all users
       const { data: usersData, error: usersError } = await supabase
         .from("profiles")
-        .select(`
-          id, email, display_name, role, created_at, updated_at,
-          sentinels!owner_guardian_id(id)
-        `)
+        .select("id, email, display_name, role, created_at, updated_at")
         .order("created_at", { ascending: false });
       
       if (usersError) throw usersError;
+
+      // Then get sentinel counts for wardens
+      const wardenIds = (usersData ?? []).filter(u => u.role === 'warden').map(u => u.id);
+      let sentinelCounts: Record<string, number> = {};
+
+      if (wardenIds.length > 0) {
+        const { data: sentinelsData, error: sentinelsError } = await supabase
+          .from("sentinels")
+          .select("owner_guardian_id")
+          .in("owner_guardian_id", wardenIds);
+
+        if (!sentinelsError && sentinelsData) {
+          // Count sentinels per warden
+          sentinelsData.forEach(sentinel => {
+            const wardenId = sentinel.owner_guardian_id;
+            sentinelCounts[wardenId] = (sentinelCounts[wardenId] || 0) + 1;
+          });
+        }
+      }
       
       const formattedUsers: UserProfile[] = (usersData ?? []).map(user => ({
         id: user.id,
@@ -320,7 +378,7 @@ export default function ArchitectDashboard() {
         role: user.role,
         created_at: user.created_at,
         updated_at: user.updated_at,
-        sentinel_count: user.sentinels?.length || 0
+        sentinel_count: sentinelCounts[user.id] || 0
       }));
       
       setUsers(formattedUsers);
