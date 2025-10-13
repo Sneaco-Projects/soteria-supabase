@@ -196,13 +196,21 @@ export default function ArchitectDashboard() {
 
   const loadProviderData = async () => {
     try {
+      console.log("Loading provider data...");
+      
       // Load wardens
       const { data: wardensData, error: wardensError } = await supabase
         .from("profiles")
         .select("id, email, display_name, created_at")
         .eq("role", "warden")
         .order("display_name");
-      if (wardensError) throw wardensError;
+      
+      console.log("Wardens loaded:", wardensData?.length, "Error:", wardensError);
+      
+      if (wardensError) {
+        console.error("Error loading wardens:", wardensError);
+        throw wardensError;
+      }
       setWardens(wardensData ?? []);
 
       // Load all providers - simplified approach
@@ -212,7 +220,12 @@ export default function ArchitectDashboard() {
         .eq("role", "provider")
         .order("display_name");
       
-      if (providersError) throw providersError;
+      console.log("Providers loaded:", providerProfiles?.length, "Error:", providersError);
+      
+      if (providersError) {
+        console.error("Error loading providers:", providersError);
+        throw providersError;
+      }
 
       // Get provider details from providers table
       let providerDetails: Record<string, any> = {};
@@ -344,23 +357,30 @@ export default function ArchitectDashboard() {
 
   const loadUsers = async () => {
     try {
-      // First get all users
+      console.log("Loading users...");
+      
+      // Get all users first
       const { data: usersData, error: usersError } = await supabase
         .from("profiles")
         .select("id, email, display_name, role, created_at, updated_at")
         .order("created_at", { ascending: false });
       
-      if (usersError) throw usersError;
+      console.log("Users loaded:", usersData?.length, "Error:", usersError);
+      
+      if (usersError) {
+        console.error("Error loading users:", usersError);
+        throw usersError;
+      }
 
-      // Then get sentinel counts for wardens
-      const wardenIds = (usersData ?? []).filter(u => u.role === 'warden').map(u => u.id);
+      // Get sentinel counts separately to avoid relationship issues
       let sentinelCounts: Record<string, number> = {};
-
-      if (wardenIds.length > 0) {
+      
+      try {
         const { data: sentinelsData, error: sentinelsError } = await supabase
           .from("sentinels")
-          .select("owner_guardian_id")
-          .in("owner_guardian_id", wardenIds);
+          .select("owner_guardian_id");
+
+        console.log("Sentinels loaded:", sentinelsData?.length, "Error:", sentinelsError);
 
         if (!sentinelsError && sentinelsData) {
           // Count sentinels per warden
@@ -369,6 +389,9 @@ export default function ArchitectDashboard() {
             sentinelCounts[wardenId] = (sentinelCounts[wardenId] || 0) + 1;
           });
         }
+      } catch (sentinelError) {
+        console.warn("Could not load sentinel counts:", sentinelError);
+        // Continue without sentinel counts
       }
       
       const formattedUsers: UserProfile[] = (usersData ?? []).map(user => ({
@@ -381,8 +404,10 @@ export default function ArchitectDashboard() {
         sentinel_count: sentinelCounts[user.id] || 0
       }));
       
+      console.log("Formatted users:", formattedUsers.length);
       setUsers(formattedUsers);
     } catch (e: any) {
+      console.error("Failed to load users:", e);
       setErrorMsg(e?.message ?? "Failed to load users.");
     }
   };
