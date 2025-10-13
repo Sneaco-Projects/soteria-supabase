@@ -272,19 +272,35 @@ const loadWardenDetails = async (wardenId: string) => {
       .single();
     if (profileError) throw profileError;
 
-    // Get warden's sentinels with device counts
+    // Get warden's sentinels
     const { data: sentinelsData, error: sentinelsError } = await supabase
       .from("sentinels")
-      .select(`
-        id, full_name, phone, notes, created_at,
-        devices!sentinel_id(id, last_seen_at)
-      `)
+      .select("id, full_name, phone, notes, created_at")
       .eq("owner_guardian_id", wardenId);
     if (sentinelsError) throw sentinelsError;
 
+    // Get devices for these sentinels separately to avoid join issues
+    const sentinelIds = (sentinelsData || []).map(s => s.id);
+    let devicesData: any[] = [];
+    
+    if (sentinelIds.length > 0) {
+      const { data: devices, error: devicesError } = await supabase
+        .from("devices")
+        .select("id, sentinel_id, last_seen_at")
+        .in("sentinel_id", sentinelIds);
+      
+      if (devicesError) {
+        console.warn("Error loading devices:", devicesError);
+      } else {
+        devicesData = devices || [];
+      }
+    }
+
+    // Map sentinels with device counts and latest activity
     const sentinels = (sentinelsData || []).map(s => {
-      const deviceCount = s.devices?.length || 0;
-      const latestEvent = s.devices?.reduce((latest: string | null, d: any) => {
+      const sentinelDevices = devicesData.filter(d => d.sentinel_id === s.id);
+      const deviceCount = sentinelDevices.length;
+      const latestEvent = sentinelDevices.reduce((latest: string | null, d: any) => {
         if (!latest || (d.last_seen_at && d.last_seen_at > latest)) {
           return d.last_seen_at;
         }
@@ -303,14 +319,14 @@ const loadWardenDetails = async (wardenId: string) => {
     });
 
     // Get latest activity across all devices
-    const sentinelIds = sentinels.map(s => s.id);
+    const allSentinelIds = sentinels.map(s => s.id);
     let latestActivity: string | null = null;
     
-    if (sentinelIds.length > 0) {
+    if (allSentinelIds.length > 0) {
       const { data: recentEvents, error: eventsError } = await supabase
         .from("device_events")
         .select("created_at")
-        .in("sentinel_id", sentinelIds)
+        .in("sentinel_id", allSentinelIds)
         .order("created_at", { ascending: false })
         .limit(1);
       

@@ -36,17 +36,10 @@ export async function middleware(req: NextRequest) {
 
   let role = profile?.role;
   
-  // Debug: Log role information
-  console.log(`Middleware - Raw role from database: "${role}", type: ${typeof role}, user: ${session.user.id}`);
-  console.log("Middleware - Profile data:", profile);
-  
   // Handle legacy "guardian" role by treating it as "warden"
   if (role === "guardian") {
     role = "warden";
-    console.log(`Converting legacy guardian role to warden for user: ${session.user.id}`);
   }
-  
-  console.log(`Middleware - Final role after conversion: "${role}"`);
   
   // If no role found, create default profile and redirect to warden dashboard
   if (!role) {
@@ -56,7 +49,6 @@ export async function middleware(req: NextRequest) {
 
   // Redirect /dashboard to the user's role-specific dashboard
   if (path === "/dashboard") {
-    console.log(`Middleware - Redirecting /dashboard to /dashboard/${role}`);
     return NextResponse.redirect(new URL(`/dashboard/${role ?? "warden"}`, req.url));
   }
 
