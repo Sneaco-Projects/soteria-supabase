@@ -97,7 +97,7 @@ export default function ProviderDashboard() {
   const [me, setMe] = useState<Profile | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [sentinels, setSentinels] = useState<Sentinel[]>([]);
-  const [guardianProfiles, setGuardianProfiles] = useState<Record<string, Profile>>({});
+  const [wardenProfiles, setWardenProfiles] = useState<Record<string, Profile>>({});  // guardian = warden
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -146,7 +146,7 @@ export default function ProviderDashboard() {
 
         const sentinelIds = Array.from(new Set((asg ?? []).map(a => a.sentinel_id)));
         if (sentinelIds.length === 0) {
-          setSentinels([]); setDevices([]); setGuardianProfiles({});
+          setSentinels([]); setDevices([]); setWardenProfiles({});
           return;
         }
 
@@ -168,7 +168,7 @@ export default function ProviderDashboard() {
           if (gErr) throw gErr;
           (gps ?? []).forEach(g => guardianMap[g.id] = g);
         }
-        setGuardianProfiles(guardianMap);
+        setWardenProfiles(guardianMap);
 
         const { data: devs, error: dErr } = await supabase
           .from("devices")
@@ -183,7 +183,7 @@ export default function ProviderDashboard() {
       // New system: Get all sentinels owned by assigned wardens
       const wardenIds = Array.from(new Set((wardenAssignments ?? []).map(w => w.warden_id)));
       if (wardenIds.length === 0) {
-        setSentinels([]); setDevices([]); setGuardianProfiles({});
+        setSentinels([]); setDevices([]); setWardenProfiles({});
         setAssignments([]);
         return;
       }
@@ -197,7 +197,7 @@ export default function ProviderDashboard() {
           display_name: w.warden_display_name
         };
       });
-      setGuardianProfiles(guardianMap);
+      setWardenProfiles(guardianMap);
 
       // Get all sentinels owned by these wardens
       const { data: sens, error: sErr } = await supabase
@@ -430,7 +430,7 @@ const startStream = (deviceId?: string) => {
 
   // ---------- UI helpers ----------
   const guardianLabel = (guardianId: string) => {
-    const g = guardianProfiles[guardianId];
+    const g = wardenProfiles[guardianId];
     return g ? (g.display_name || g.email || guardianId) : guardianId;
   };
 
@@ -491,7 +491,7 @@ const startStream = (deviceId?: string) => {
         <TabsContent value="my-sentinels">
           {loading ? (
             <div className="text-sm text-gray-600">Loading…</div>
-          ) : Object.keys(guardianProfiles).length === 0 ? (
+          ) : Object.keys(wardenProfiles).length === 0 ? (
             <Card className="bg-white/90 border-emerald-200">
               <CardContent className="py-8 text-center text-gray-600">
                 <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
@@ -501,7 +501,7 @@ const startStream = (deviceId?: string) => {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {Object.values(guardianProfiles).map(warden => {
+              {Object.values(wardenProfiles).map((warden: Profile) => {
                 const wardenSentinels = sentinels.filter(s => s.owner_guardian_id === warden.id);
                 const wardenDevices = wardenSentinels.flatMap(s => devicesBySentinel[s.id] ?? []);
                 const lastSeen = wardenDevices

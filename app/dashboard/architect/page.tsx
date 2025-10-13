@@ -372,7 +372,7 @@ export default function ArchitectDashboard() {
         throw usersError;
       }
 
-      // Get sentinel counts separately to avoid relationship issues
+      // Get sentinel counts - warden is the guardian (owner_guardian_id = warden's user ID)
       let sentinelCounts: Record<string, number> = {};
       
       try {
@@ -383,9 +383,9 @@ export default function ArchitectDashboard() {
         console.log("Sentinels loaded:", sentinelsData?.length, "Error:", sentinelsError);
 
         if (!sentinelsError && sentinelsData) {
-          // Count sentinels per warden
+          // Count sentinels per warden (guardian)
           sentinelsData.forEach(sentinel => {
-            const wardenId = sentinel.owner_guardian_id;
+            const wardenId = sentinel.owner_guardian_id; // This is the warden's user ID
             sentinelCounts[wardenId] = (sentinelCounts[wardenId] || 0) + 1;
           });
         }
