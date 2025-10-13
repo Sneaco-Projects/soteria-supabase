@@ -572,7 +572,13 @@ const startStream = (deviceId?: string) => {
                         {warden.display_name || 'Unnamed Warden'}
                       </CardTitle>
                       <CardDescription>
-                        <span className="text-gray-800">{warden.email}</span>
+                        <div className="text-gray-800">{warden.email}</div>
+                        {wardenSentinels.length === 1 && (
+                          <div className="text-sm text-gray-600 mt-1">
+                            Monitoring: <span className="font-medium">{wardenSentinels[0].full_name}</span>
+                            {wardenSentinels[0].phone && <span className="ml-2">📱 {wardenSentinels[0].phone}</span>}
+                          </div>
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -602,7 +608,10 @@ const startStream = (deviceId?: string) => {
                                       <User className="h-4 w-4 text-blue-600" />
                                       <div>
                                         <div className="text-gray-800">{s.full_name}</div>
-                                        <div className="text-xs text-gray-500">{sentinelDevices.length} device(s)</div>
+                                        <div className="text-xs text-gray-500">
+                                          {s.phone && <span className="mr-2">📱 {s.phone}</span>}
+                                          {sentinelDevices.length} device(s)
+                                        </div>
                                       </div>
                                     </div>
                                     {sentinelDevices.length > 0 && (
