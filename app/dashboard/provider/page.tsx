@@ -491,6 +491,87 @@ const startStream = (deviceId?: string) => {
     return g ? (g.display_name || g.email || guardianId) : guardianId;
   };
 
+  // Helper functions (matching warden dashboard design)
+  type Tone = "danger" | "warn" | "success" | "info" | "muted";
+  
+  const toneClasses: Record<Tone, string> = {
+    danger: "bg-red-50 border-red-200",
+    warn: "bg-amber-50 border-amber-200", 
+    success: "bg-emerald-50 border-emerald-200",
+    info: "bg-sky-50 border-sky-200",
+    muted: "bg-zinc-50 border-zinc-200",
+  };
+  
+  const railClasses: Record<Tone, string> = {
+    danger: "bg-red-400",
+    warn: "bg-amber-400",
+    success: "bg-emerald-500", 
+    info: "bg-sky-500",
+    muted: "bg-zinc-300",
+  };
+
+  function getEventMeta(e: DeviceEvent): { Icon: any; tone: Tone; label: string } {
+    switch (e.event_type) {
+      case "SOS":        return { Icon: ShieldAlert,  tone: "danger",  label: "SOS" };
+      case "BTN_SHORT":  return { Icon: Bell,         tone: "warn",    label: "Button" };
+      case "IN_SMS":     return { Icon: MessageSquareText, tone: "info", label: "SMS" };
+      case "PAIR_OK":    return { Icon: CheckCircle2, tone: "success", label: "Paired" };
+      case "PAIR_FAIL":
+      case "UNPAIR_DENY":return { Icon: XCircle,      tone: "danger",  label: "Pair error" };
+      case "HEALTH":     return { Icon: Info,         tone: "muted",   label: "Health" };
+      case "OTW":        return { Icon: User,         tone: "info",    label: "On the way" };
+      case "GPS_SEARCH": return { Icon: MapPin,       tone: "muted",   label: "GPS Search" };
+      default:           return { Icon: Info,         tone: "muted",   label: e.event_type };
+    }
+  }
+
+  function prettyLabel(e: DeviceEvent): string {
+    const p = e.payload || {};
+    switch (e.event_type) {
+      case "PAIR_OK": return "✅ Paired successfully";
+      case "PAIR_FAIL": return "❌ Pair failed";
+      case "UNPAIR_OK": return "🔓 Unpaired by guardian";
+      case "UNPAIR_DENY": return "⛔ Unpair denied";
+      case "BTN_SHORT": return "🔔 Button pressed (short)";
+      case "SOS": return "🚨 SOS sent";
+      case "OTW": return "🚗 On the way";
+      case "IN_SMS": return `💬 Incoming SMS${p?.message ? `: "${String(p.message)}"` : ""}`;
+      case "AGPS_BOOST": return "📡 A-GPS boosting…";
+      case "AGPS_STOP": return "📡 A-GPS detached";
+      case "HEALTH": return `💊 Health ${p?.message ?? ""}`.trim();
+      case "GPS_SEARCH": return "🔍 GPS search";
+      default: return e.event_type;
+    }
+  }
+
+  function dayLabel(d: Date) {
+    const now = new Date();
+    const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff = (a.getTime() - b.getTime()) / 86400000;
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Yesterday"; 
+    return d.toLocaleDateString();
+  }
+
+  function compactHealth(events: DeviceEvent[]) {
+    const out: (DeviceEvent & { _count?: number })[] = [];
+    for (const e of events) {
+      const last = out[out.length - 1];
+      if (
+        last &&
+        last.event_type === "HEALTH" &&
+        e.event_type === "HEALTH" &&
+        Math.abs(Date.parse(e.created_at) - Date.parse(last.created_at)) < 90_000
+      ) {
+        last._count = (last._count ?? 1) + 1;
+      } else {
+        out.push({ ...e });
+      }
+    }
+    return out;
+  }
+
   const chip = (e: string) =>
     e === "SOS" ? "bg-red-100 text-red-700 border-red-200"
     : e === "OTW" ? "bg-blue-100 text-blue-700 border-blue-200"
