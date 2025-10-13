@@ -312,13 +312,18 @@ export default function ArchitectDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated.");
 
+      // Use upsert to handle cases where an inactive assignment exists
       const { error } = await supabase
         .from("warden_provider_assignments")
-        .insert({
+        .upsert({
           warden_id: selectedWarden,
           provider_id: selectedProvider,
           assigned_by: user.id,
-          notes: assignmentNotes.trim() || null
+          notes: assignmentNotes.trim() || null,
+          active: true,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'warden_id,provider_id'
         });
 
       if (error) throw error;
@@ -338,19 +343,25 @@ export default function ArchitectDashboard() {
     try {
       if (!removeAssignmentId) return;
 
+      console.log("Removing assignment:", removeAssignmentId);
+
       const { error } = await supabase
         .from("warden_provider_assignments")
         .update({ active: false })
         .eq("warden_id", removeAssignmentId.warden_id)
         .eq("provider_id", removeAssignmentId.provider_id);
 
+      console.log("Update result:", { error });
       if (error) throw error;
 
       setSuccessMsg("Assignment removed successfully.");
       setOpenRemoveAssignment(false);
       setRemoveAssignmentId(null);
+      
+      console.log("Reloading provider data after removal...");
       await loadProviderData();
     } catch (e: any) {
+      console.error("Error in removeAssignment:", e);
       setErrorMsg(e?.message ?? "Failed to remove assignment.");
     }
   };
