@@ -254,7 +254,7 @@ export default function HomePage() {
             {[
               { icon: <Shield className="h-12 w-12" />, title: "Instant Emergency Response", description: "Get connected to help with one press" },
               { icon: <MapPin className="h-12 w-12" />, title: "Precise GPS Tracking", description: "Accurate location when seconds matter" },
-              { icon: <Heart className="h-12 w-12" />, title: "Health Monitoring", description: "Detect falls & monitor vitals (model dependent)" },
+              { icon: <Heart className="h-12 w-12" />, title: "Health Monitoring", description: "Monitor vitals and wellness status (model dependent)" },
               { icon: <Phone className="h-12 w-12" />, title: "Two-Way Communication", description: "Talk directly with responders" },
               { icon: <Battery className="h-12 w-12" />, title: "Long Battery Life", description: "Power that lasts when you need it" },
               { icon: <Wifi className="h-12 w-12" />, title: "Global Connectivity", description: "Designed for reliable coverage" },

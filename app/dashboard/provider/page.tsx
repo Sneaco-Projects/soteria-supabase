@@ -137,10 +137,11 @@ export default function ProviderDashboard() {
       
       if (waErr) {
         console.log("New warden assignments not available, falling back to old system");
-        // Fallback to old provider_assignments system
+        // Fallback to old provider_assignments system - FILTER BY CURRENT PROVIDER
         const { data: asg, error: aErr } = await supabase
           .from("provider_assignments")
-          .select("provider_id, sentinel_id");
+          .select("provider_id, sentinel_id")
+          .eq("provider_id", (await supabase.auth.getUser()).data.user?.id);
         if (aErr) throw aErr;
         setAssignments(asg ?? []);
 
@@ -448,7 +449,7 @@ const startStream = (deviceId?: string) => {
   }, [events, filterText]);
 
   const incidents = useMemo(() => {
-    const critical = new Set(["SOS", "FALL", "CRITICAL", "LOW_BATTERY", "OTW"]);
+    const critical = new Set(["SOS", "CRITICAL", "OTW"]);
     return filteredEvents.filter(e => critical.has(e.event_type));
   }, [filteredEvents]);
 
@@ -493,9 +494,13 @@ const startStream = (deviceId?: string) => {
   const chip = (e: string) =>
     e === "SOS" ? "bg-red-100 text-red-700 border-red-200"
     : e === "OTW" ? "bg-blue-100 text-blue-700 border-blue-200"
+    : e === "BTN_SHORT" ? "bg-amber-100 text-amber-700 border-amber-200"
+    : e === "IN_SMS" ? "bg-sky-100 text-sky-700 border-sky-200"
     : e.startsWith("AGPS") ? "bg-amber-100 text-amber-700 border-amber-200"
     : e === "HEALTH" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-    : e === "LOW_BATTERY" ? "bg-rose-100 text-rose-700 border-rose-200"
+    : e === "PAIR_OK" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+    : e.startsWith("PAIR") || e.startsWith("UNPAIR") ? "bg-rose-100 text-rose-700 border-rose-200"
+    : e === "GPS_SEARCH" ? "bg-purple-100 text-purple-700 border-purple-200"
     : "bg-zinc-100 text-zinc-700 border-zinc-200";
 
   return (
@@ -539,7 +544,7 @@ const startStream = (deviceId?: string) => {
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="space-y-6">
         <TabsList className="bg-white/80 backdrop-blur-lg border border-emerald-200">
           <TabsTrigger value="my-sentinels" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">My Wardens</TabsTrigger>
-          <TabsTrigger value="incidents"    className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Incidents</TabsTrigger>
+          <TabsTrigger value="incidents"    className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Events</TabsTrigger>
           <TabsTrigger value="directory"    className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Directory</TabsTrigger>
         </TabsList>
 
@@ -676,16 +681,16 @@ const startStream = (deviceId?: string) => {
           )}
         </TabsContent>
 
-        {/* Incidents */}
+        {/* Events */}
         <TabsContent value="incidents">
           <Card className="bg-white/90 border-emerald-200">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Siren className="h-5 w-5 text-red-600" />
-                {focusedDeviceId ? "Focused Device Incidents" : "Live Incidents (Assigned Sentinels)"}
+                <Siren className="h-5 w-5 text-emerald-600" />
+                {focusedDeviceId ? "Focused Device Events" : "Live Events (Assigned Sentinels)"}
               </CardTitle>
               <CardDescription>
-                Critical signals (SOS, FALL, LOW_BATTERY, OTW). Filter or click a device in My Sentinels to focus.
+                All device events from assigned wardens. Filter or click a device in My Sentinels to focus.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -725,11 +730,11 @@ const startStream = (deviceId?: string) => {
 
               {eventsLoading ? (
                 <div className="text-sm text-gray-600">Loading…</div>
-              ) : incidents.length === 0 ? (
-                <div className="text-sm text-gray-600">No incidents right now.</div>
+              ) : filteredEvents.length === 0 ? (
+                <div className="text-sm text-gray-600">No events right now.</div>
               ) : (
                 <div className="space-y-2">
-                  {incidents.slice(0, 400).map((e) => {
+                  {filteredEvents.slice(0, 400).map((e) => {
                     const payload = e.payload || {};
                     const msg = typeof payload.message === "string" ? payload.message : "";
                     const lat = typeof payload.lat === "number" ? payload.lat : undefined;

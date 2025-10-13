@@ -806,6 +806,20 @@ export default function WardenDashboard() {
     });
   }, [events, tab, eventsFilter]);
 
+  // Critical incidents (matching provider dashboard)
+  const incidents = useMemo(() => {
+    const critical = new Set(["SOS", "OTW"]);
+    return visibleEvents.filter(e => critical.has(e.event_type));
+  }, [visibleEvents]);
+
+  // Event styling helper (matching provider dashboard)
+  const chip = (e: string) =>
+    e === "SOS" ? "bg-red-100 text-red-700 border-red-200"
+    : e === "OTW" ? "bg-blue-100 text-blue-700 border-blue-200"
+    : e.startsWith("AGPS") ? "bg-amber-100 text-amber-700 border-amber-200"
+    : e === "HEALTH" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+    : "bg-zinc-100 text-zinc-700 border-zinc-200";
+
   /* ----------------- UI ----------------- */
 
   return (
@@ -941,6 +955,65 @@ export default function WardenDashboard() {
             </div>
           )}
 
+          {/* Critical Incidents */}
+          <div className="mt-6">
+            <Card className="bg-white/90 border-red-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-red-700" />
+                  Critical Incidents
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {incidents.length === 0 ? (
+                  <div className="flex h-32 flex-col items-center justify-center text-center">
+                    <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-600" />
+                    <p className="text-sm text-gray-600">No critical incidents. All sentinels are safe.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-xs text-gray-600 mb-3">
+                      Critical signals (SOS, OTW). Most recent incidents from your sentinels.
+                    </div>
+                    {incidents.slice(0, 10).map((e) => {
+                      const p = e.payload || {};
+                      const when = new Date(e.created_at);
+                      const sentinelName = sentinels.find(s => s.id === e.sentinel_id)?.full_name || "Unknown";
+                      
+                      return (
+                        <div key={e.id} className="rounded-lg border bg-white p-3 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${chip(e.event_type)}`}>
+                                  {e.event_type === "SOS" && "🚨"}
+                                  {e.event_type === "OTW" && "🚗"}
+                                  {e.event_type}
+                                </span>
+                                <span className="text-sm font-medium text-gray-900">{sentinelName}</span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-2">{prettyLabel(e)}</p>
+                              {p.location?.address && (
+                                <p className="text-xs text-gray-500 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {p.location.address}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-gray-500">{when.toLocaleTimeString()}</div>
+                              <div className="text-xs text-gray-400">{when.toLocaleDateString()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Live Events */}
           <div className="mt-6">
             <Card className="bg-white/90 border-emerald-200">
@@ -1035,6 +1108,9 @@ export default function WardenDashboard() {
                             <div className="truncate">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-medium">{prettyLabel(e)}</span>
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${chip(e.event_type)}`}>
+                                  {e.event_type}
+                                </span>
                                 {(e as any)._count ? (
                                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">
                                     ×{(e as any)._count}
