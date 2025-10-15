@@ -1,22 +1,13 @@
-// app/(site)/page.tsx — HOMEPAGE (no mock data)
+// app/(site)/page.tsx — HOMEPAGE
 "use client";
 
 import Navbar from "@/components/site/navbar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Shield, MapPin, Heart, Phone, Wifi, Battery, AlertTriangle, Play, Star, ArrowRight, CheckCircle } from "lucide-react";
+import { Shield, MapPin, Heart, Phone, Wifi, Battery, AlertTriangle, Star, ArrowRight, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
-
-// Types reflecting your DB shape. Adjust to match exact columns.
-type PublicStats = {
-  alert_count: number | null;
-  lives_protected: number | null;
-  avg_response_seconds: number | null;
-  uptime: number | null; // 0..100
-};
 
 type Testimonial = {
   name: string;
@@ -26,29 +17,23 @@ type Testimonial = {
 };
 
 export default function HomePage() {
-  const [stats, setStats] = useState<PublicStats | null>(null);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
 
-  // Fetch real data from Supabase
+  // Fetch testimonials from Supabase
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const [{ data: statsRow, error: statsErr }, { data: tRows, error: tErr }] = await Promise.all([
-        supabase.from("public_stats").select("alert_count,lives_protected,avg_response_seconds,uptime").single(),
-        supabase
-          .from("testimonials")
-          .select("name,age,story,location")
-          .eq("is_approved", true)
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
+      const { data: tRows, error: tErr } = await supabase
+        .from("testimonials")
+        .select("name,age,story,location")
+        .eq("is_approved", true)
+        .order("created_at", { ascending: false })
+        .limit(10);
 
       if (!mounted) return;
-      if (!statsErr) setStats(statsRow as PublicStats);
       if (!tErr && Array.isArray(tRows)) setTestimonials(tRows as Testimonial[]);
       setLoading(false);
     })();
@@ -65,13 +50,6 @@ export default function HomePage() {
     }, 5000);
     return () => clearInterval(id);
   }, [testimonials.length]);
-
-  const livesProtected = stats?.lives_protected ?? null;
-  const alertCount = stats?.alert_count ?? null;
-  const avgResponse = stats?.avg_response_seconds ?? null;
-  const uptime = stats?.uptime ?? null;
-
-  const hasStats = useMemo(() => livesProtected !== null || alertCount !== null || avgResponse !== null || uptime !== null, [livesProtected, alertCount, avgResponse, uptime]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden">
@@ -91,13 +69,6 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="text-gray-800 space-y-8">
               <div className="space-y-4">
-                {hasStats ? (
-                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                    🌟 LIVE: {alertCount?.toLocaleString?.() ?? "—"} Alerts Today
-                  </Badge>
-                ) : (
-                  <Badge className="bg-gray-100 text-gray-500 border-gray-200">Stats unavailable</Badge>
-                )}
                 <h1 className="text-6xl md:text-7xl font-bold leading-tight">
                   Your Life.
                   <br />
@@ -109,30 +80,12 @@ export default function HomePage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-lg px-8 py-4 rounded-full border-0 shadow-lg transform hover:scale-105 transition-all text-white">
-                  <Shield className="mr-2 h-5 w-5" />
-                  Get Protected Now
-                </Button>
-                <Button size="lg" variant="outline" className="text-lg px-8 py-4 rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={() => setIsPlaying((p) => !p)}>
-                  <Play className="mr-2 h-5 w-5" />
-                  Watch Demo
-                </Button>
-              </div>
-
-              {/* Live Stats */}
-              <div className="grid grid-cols-3 gap-6 pt-8">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-800">{livesProtected?.toLocaleString?.() ?? "—"}</div>
-                  <div className="text-gray-500 text-sm">Lives Protected</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-800">{avgResponse ? `${avgResponse}s` : "—"}</div>
-                  <div className="text-gray-500 text-sm">Avg Response</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-800">{uptime != null ? `${uptime}%` : "—"}</div>
-                  <div className="text-gray-500 text-sm">Uptime</div>
-                </div>
+                <Link href="/auth/signup">
+                  <Button size="lg" className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-lg px-8 py-4 rounded-full border-0 shadow-lg transform hover:scale-105 transition-all text-white">
+                    <Shield className="mr-2 h-5 w-5" />
+                    Get Protected Now
+                  </Button>
+                </Link>
               </div>
             </div>
 

@@ -1143,11 +1143,25 @@ function PrettyPayload({ e }: { e: DeviceEvent }) {
           </div>
         )}
         {(p.lat || p.lon) && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <MapPin className="h-3 w-3" />
-            {p.lat && p.lon
-              ? `${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}`
-              : p.lat || p.lon}
+            <span>
+              {p.lat && p.lon
+                ? `${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}`
+                : p.lat || p.lon}
+            </span>
+            {p.lat && p.lon && (
+              <a
+                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                href={`https://maps.google.com/maps?q=${p.lat},${p.lon}`}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open ${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)} in Maps`}
+              >
+                <MapPin className="h-3 w-3" />
+                Open in Maps
+              </a>
+            )}
           </div>
         )}
         {p.battery && (
