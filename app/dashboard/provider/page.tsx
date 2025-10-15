@@ -1142,21 +1142,21 @@ function PrettyPayload({ e }: { e: DeviceEvent }) {
             💬 {String(p.message)}
           </div>
         )}
-        {(p.lat || p.lon) && (
+        {(p.lat || p.lon || p.lng) && (
           <div className="flex items-center gap-2">
             <MapPin className="h-3 w-3" />
             <span>
-              {p.lat && p.lon
-                ? `${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}`
-                : p.lat || p.lon}
+              {p.lat && (p.lon || p.lng)
+                ? `${Number(p.lat).toFixed(6)}, ${Number(p.lon || p.lng).toFixed(6)}`
+                : p.lat || p.lon || p.lng}
             </span>
-            {p.lat && p.lon && (
+            {p.lat && (p.lon || p.lng) && (
               <a
                 className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 border-emerald-200"
-                href={`https://maps.google.com/maps?q=${p.lat},${p.lon}`}
+                href={`https://maps.google.com/maps?q=${p.lat},${p.lon || p.lng}`}
                 target="_blank"
                 rel="noreferrer"
-                title={`Open ${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)} in Maps`}
+                title={`Open ${Number(p.lat).toFixed(6)}, ${Number(p.lon || p.lng).toFixed(6)} in Maps`}
               >
                 <MapPin className="h-3 w-3" />
                 Open in Maps
