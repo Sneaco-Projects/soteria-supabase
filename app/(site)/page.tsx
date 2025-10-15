@@ -234,11 +234,7 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto space-y-8">
             <h2 className="text-6xl font-bold text-gray-800 leading-tight">Don't Wait for an Emergency</h2>
             <p className="text-2xl text-gray-600">
-              {livesProtected != null ? (
-                <>Join over {livesProtected.toLocaleString()} people who trust SOTERIA</>
-              ) : (
-                <>Join people who trust SOTERIA</>
-              )}
+              Join people who trust SOTERIA for their safety and peace of mind
             </p>
 
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
