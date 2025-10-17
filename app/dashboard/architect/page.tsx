@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { AlertTriangle, CheckCircle, Pencil, Trash2, Users, Plus, UserCheck, Smartphone, Crown, Shield, QrCode, Menu, X } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { 
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger 
 } from "@/components/ui/dialog";
@@ -820,9 +820,8 @@ export default function ArchitectDashboard() {
                           className="bg-white/80"
                         />
                       </div>
-                </div>
-                
-                <CardContent className="px-6 pb-6 space-y-3">
+
+                      <div className="space-y-3">
               {filtered.map((d) => (
                 <Card key={d.id} className="border-emerald-100 bg-white/80">
                   <CardContent className="py-3">
@@ -891,7 +890,9 @@ export default function ArchitectDashboard() {
                   <CardContent className="py-6 text-gray-600">No devices match your search.</CardContent>
                 </Card>
               )}
-                </CardContent>
+                      </div>
+                    </CardContent>
+                  </div>
                 )}
 
                 {activeTab === "qr-codes" && (
@@ -1008,25 +1009,28 @@ export default function ArchitectDashboard() {
                   </div>
                 )}
 
-              <TabsContent value="providers" className="mt-0">
-                <div className="px-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">Provider Assignments</h3>
-                      <p className="text-sm text-gray-600">
-                        Assign providers to wardens so they can monitor device activity.
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={() => setOpenAddAssignment(true)} 
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Assignment
-                    </Button>
-                  </div>
-                  
-                  <div className="mb-4">
+                {activeTab === "providers" && (
+                  <div>
+                    <CardHeader className="pb-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-xl">Provider Assignments</CardTitle>
+                          <CardDescription>
+                            Assign providers to wardens so they can monitor device activity.
+                          </CardDescription>
+                        </div>
+                        <Button 
+                          onClick={() => setOpenAddAssignment(true)} 
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Assignment
+                        </Button>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="pt-0">
+                      <div className="mb-6">
                     <Input
                       value={providerSearch}
                       onChange={(e) => setProviderSearch(e.target.value)}
@@ -1115,22 +1119,26 @@ export default function ArchitectDashboard() {
                         </CardContent>
                       </Card>
                     )}
+                      </div>
+                    </CardContent>
                   </div>
-                </div>
-              </TabsContent>
+                )}
 
-              <TabsContent value="users" className="mt-0">
-                <div className="px-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">User Management</h3>
-                      <p className="text-sm text-gray-600">
-                        Promote registered wardens to provider or architect roles.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
+                {activeTab === "users" && (
+                  <div>
+                    <CardHeader className="pb-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-xl">User Management</CardTitle>
+                          <CardDescription>
+                            Promote registered wardens to provider or architect roles.
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="pt-0">
+                      <div className="mb-6">
                     <Input
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
@@ -1244,13 +1252,14 @@ export default function ArchitectDashboard() {
                         </CardContent>
                       </Card>
                     )}
+                      </div>
+                    </CardContent>
                   </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </Card>
+                )}
+              </Card>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Add device */}
       <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
@@ -1491,82 +1500,8 @@ export default function ArchitectDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* QR Code Generation Dialog */}
-      <Dialog open={openQrGenerate} onOpenChange={setOpenQrGenerate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate Device QR Code</DialogTitle>
-            <DialogDescription>
-              Create a QR code for device activation. The customer will scan this to automatically activate and pair their device.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="imei">IMEI Number *</Label>
-              <Input
-                id="imei"
-                value={qrForm.imei}
-                onChange={(e) => setQrForm({ ...qrForm, imei: e.target.value })}
-                placeholder="Enter device IMEI number"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sim_number">SIM Number *</Label>
-              <Input
-                id="sim_number"
-                value={qrForm.sim_number}
-                onChange={(e) => setQrForm({ ...qrForm, sim_number: e.target.value })}
-                placeholder="Enter SIM card number"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="device_model">Device Model</Label>
-              <Input
-                id="device_model"
-                value={qrForm.device_model}
-                onChange={(e) => setQrForm({ ...qrForm, device_model: e.target.value })}
-                placeholder="e.g., Soteria Guardian Pro"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={qrForm.notes}
-                onChange={(e) => setQrForm({ ...qrForm, notes: e.target.value })}
-                placeholder="Add any notes about this device..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setOpenQrGenerate(false);
-                setQrForm({
-                  imei: "",
-                  sim_number: "",
-                  device_model: "",
-                  notes: ""
-                });
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={generateQrCode}
-              className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={!qrForm.imei.trim() || !qrForm.sim_number.trim()}
-            >
-              <QrCode className="mr-2 h-4 w-4" />
-              Generate QR Code
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* QR Code Generation Dialog - Temporarily removed for debugging */}
+
     </>
   );
 }
