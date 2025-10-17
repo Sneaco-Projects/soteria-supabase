@@ -26,6 +26,7 @@ export default function SignInForm() {
   const [errorMsg, setErrorMsg]     = useState<string | null>(null);
 
   const router = useRouter();
+  // redirectParam will be read at runtime inside handleSignIn to avoid prerender/suspense issues
 
   // INLINE routeByRole (no shared helper)
   const routeByRole = async () => {
@@ -68,6 +69,21 @@ export default function SignInForm() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      // Read redirect param at runtime (safe with window)
+      let redirectParam: string | null = null;
+      if (typeof window !== "undefined") {
+        const sp = new URLSearchParams(window.location.search);
+        redirectParam = sp.get("redirect");
+      }
+      // If a redirect param is present (e.g. /activate/...), go there first
+      if (redirectParam) {
+        // Ensure redirect is safe and internal
+        const allowed = redirectParam.startsWith("/");
+        if (allowed) {
+          router.push(redirectParam);
+          return;
+        }
+      }
       await routeByRole();
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Sign in failed.");

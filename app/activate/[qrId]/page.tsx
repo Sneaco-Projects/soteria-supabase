@@ -17,6 +17,10 @@ type DeviceQR = {
   device_model: string | null;
   notes: string | null;
   status: string;
+  activated_at: string | null;
+  activated_by: string | null;
+  device_id: string | null;
+  expires_at: string | null;
 };
 
 type Sentinel = {
@@ -37,6 +41,8 @@ export default function DeviceActivation() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [alreadyActivated, setAlreadyActivated] = useState(false);
+  const [activatedDevice, setActivatedDevice] = useState<any>(null);
 
   // Authentication check
   useEffect(() => {
@@ -60,34 +66,60 @@ export default function DeviceActivation() {
       try {
         setLoading(true);
 
-        // Load QR code data
+        // Load QR code data (allow any status for better UX)
         const { data: qrCode, error: qrError } = await supabase
           .from("device_qr_codes")
           .select("*")
           .eq("qr_code", qrId)
-          .eq("status", "generated")
           .maybeSingle();
 
         if (qrError) throw qrError;
         
         if (!qrCode) {
-          setError("Invalid or expired QR code. Please contact support.");
+          setError("Invalid QR code. Please contact support.");
+          return;
+        }
+
+        // Check if QR code is expired
+        if (qrCode.expires_at && new Date(qrCode.expires_at) < new Date()) {
+          setError("This QR code has expired. Please contact support for a new activation code.");
           return;
         }
 
         setQrData(qrCode);
 
-        // Load user's sentinels
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: userSentinels, error: sentinelsError } = await supabase
-            .from("sentinels")
-            .select("id, full_name")
-            .eq("owner_guardian_id", user.id)
-            .order("full_name");
+        // Check if already activated
+        if (qrCode.status === "activated") {
+          setAlreadyActivated(true);
+          
+          // Load device and sentinel info for already activated QR codes
+          if (qrCode.device_id) {
+            const { data: deviceInfo, error: deviceError } = await supabase
+              .from("devices")
+              .select(`
+                *,
+                sentinel:sentinels(id, full_name)
+              `)
+              .eq("id", qrCode.device_id)
+              .maybeSingle();
 
-          if (sentinelsError) throw sentinelsError;
-          setSentinels(userSentinels || []);
+            if (!deviceError && deviceInfo) {
+              setActivatedDevice(deviceInfo);
+            }
+          }
+        } else {
+          // Load user's sentinels for new activations
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: userSentinels, error: sentinelsError } = await supabase
+              .from("sentinels")
+              .select("id, full_name")
+              .eq("owner_guardian_id", user.id)
+              .order("full_name");
+
+            if (sentinelsError) throw sentinelsError;
+            setSentinels(userSentinels || []);
+          }
         }
 
       } catch (err: any) {
@@ -110,6 +142,30 @@ export default function DeviceActivation() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Double-check the QR code is still available for activation
+      const { data: currentQrData, error: checkError } = await supabase
+        .from("device_qr_codes")
+        .select("status, activated_by")
+        .eq("id", qrData.id)
+        .single();
+
+      if (checkError) throw checkError;
+
+      // If already activated, check if it was activated by the same user
+      if (currentQrData.status === "activated") {
+        if (currentQrData.activated_by === user.id) {
+          // Same user - show success
+          setSuccess(true);
+          setTimeout(() => {
+            router.push("/dashboard/warden");
+          }, 2000);
+          return;
+        } else {
+          // Different user - show error
+          throw new Error("This device has already been activated by another user.");
+        }
+      }
+
       // Create device record
       const { data: device, error: deviceError } = await supabase
         .from("devices")
@@ -125,7 +181,7 @@ export default function DeviceActivation() {
 
       if (deviceError) throw deviceError;
 
-      // Update QR code status
+      // Update QR code status - only if still 'generated'
       const { error: updateError } = await supabase
         .from("device_qr_codes")
         .update({
@@ -134,7 +190,8 @@ export default function DeviceActivation() {
           activated_by: user.id,
           device_id: device.id
         })
-        .eq("id", qrData.id);
+        .eq("id", qrData.id)
+        .eq("status", "generated"); // Only update if still pending
 
       if (updateError) throw updateError;
 
@@ -188,6 +245,59 @@ export default function DeviceActivation() {
             </p>
             <p className="text-sm text-gray-500">
               Redirecting to your dashboard...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (alreadyActivated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-lg">
+          <CardHeader className="text-center">
+            <CheckCircle className="h-16 w-16 text-blue-500 mx-auto mb-4" />
+            <CardTitle className="text-2xl text-blue-700">Device Already Activated</CardTitle>
+            <p className="text-gray-600">This device has already been activated and paired</p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Device Information */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-gray-600" />
+                <span className="font-medium">Device Information</span>
+              </div>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><strong>IMEI:</strong> {qrData?.imei}</p>
+                <p><strong>SIM:</strong> {qrData?.sim_number}</p>
+                {qrData?.device_model && <p><strong>Model:</strong> {qrData.device_model}</p>}
+                <p><strong>Status:</strong> <span className="text-green-600 font-medium">Activated</span></p>
+                <p><strong>Activated:</strong> {qrData?.activated_at ? new Date(qrData.activated_at).toLocaleDateString() : "Unknown"}</p>
+                {activatedDevice?.sentinel && (
+                  <p><strong>Assigned to:</strong> {activatedDevice.sentinel.full_name}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => router.push("/dashboard/warden")} 
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Go to Dashboard
+              </Button>
+              <Button 
+                onClick={() => router.back()} 
+                variant="outline"
+                className="flex-1"
+              >
+                Go Back
+              </Button>
+            </div>
+
+            <p className="text-xs text-gray-500 text-center">
+              If you need to make changes to this device, please visit your dashboard or contact support.
             </p>
           </CardContent>
         </Card>
