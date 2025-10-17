@@ -28,7 +28,6 @@ import {
 import {
   Plus,
   User,
-  Phone,
   StickyNote,
   AlertTriangle,
   CheckCircle,
@@ -55,7 +54,6 @@ import {
 export type Sentinel = {
   id: string;
   full_name: string;
-  phone: string | null;
   notes: string | null;
 };
 
@@ -316,14 +314,12 @@ export default function WardenDashboard() {
   // CRUD
   const [openAdd, setOpenAdd] = useState(false);
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   // Removed addHwUid since Add Sentinel no longer requires device pairing
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
 
   const [openDelete, setOpenDelete] = useState(false);
@@ -391,7 +387,7 @@ export default function WardenDashboard() {
     try {
       const { data, error } = await supabase
         .from("sentinels")
-        .select("id, full_name, phone, notes, created_at")
+        .select("id, full_name, notes, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       setSentinels(data ?? []);
@@ -427,7 +423,7 @@ export default function WardenDashboard() {
     const q = query.trim().toLowerCase();
     if (!q) return sentinels;
     return sentinels.filter((s) =>
-      [s.full_name, s.phone ?? "", s.notes ?? ""].some((v) => v.toLowerCase().includes(q))
+      [s.full_name, s.notes ?? ""].some((v) => v.toLowerCase().includes(q))
     );
   }, [sentinels, query]);
 
@@ -444,14 +440,13 @@ export default function WardenDashboard() {
         .insert({
           owner_guardian_id: user.id,
           full_name: fullName.trim(),
-          phone: phone.trim() || null,
           notes: notes.trim() || null,
         });
       if (error) throw error;
 
       // Clear add form and reload sentinels
       setOpenAdd(false);
-      setFullName(""); setPhone(""); setNotes("");
+      setFullName(""); setNotes("");
       setSuccessMsg("Sentinel added successfully. You can now pair them with a device.");
       
       // Reload the sentinels list
@@ -463,7 +458,7 @@ export default function WardenDashboard() {
   };
 
   const openEditFor = (s: Sentinel) => {
-    setEditId(s.id); setEditName(s.full_name); setEditPhone(s.phone ?? ""); setEditNotes(s.notes ?? "");
+    setEditId(s.id); setEditName(s.full_name); setEditNotes(s.notes ?? "");
     setOpenEdit(true);
   };
 
@@ -472,7 +467,6 @@ export default function WardenDashboard() {
     try {
       const { error } = await supabase.from("sentinels").update({
         full_name: editName.trim(),
-        phone: editPhone.trim() || null,
         notes: editNotes.trim() || null,
       }).eq("id", editId);
       if (error) throw error;
@@ -887,7 +881,7 @@ export default function WardenDashboard() {
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search name, phone, notes…"
+                  placeholder="Search name, notes…"
                   className="w-64 bg-white/80 pl-8"
                 />
               </div>
@@ -930,9 +924,6 @@ export default function WardenDashboard() {
                           <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openPairFor(s)}>
-                            <LinkIcon className="mr-2 h-4 w-4" /> Pair device
-                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEditFor(s)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
@@ -942,11 +933,21 @@ export default function WardenDashboard() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </CardHeader>
-                    <CardContent className="space-y-2 text-sm text-gray-700">
-                      <div className="flex items-center gap-2"><Phone className="h-4 w-4" /> {s.phone || "—"}</div>
+                    <CardContent className="space-y-3 text-sm text-gray-700">
                       <div className="flex items-start gap-2">
                         <StickyNote className="mt-0.5 h-4 w-4" />
                         <span className="line-clamp-3">{s.notes || "No notes"}</span>
+                      </div>
+                      <div className="pt-2">
+                        <Button 
+                          onClick={() => openPairFor(s)}
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                        >
+                          <LinkIcon className="mr-2 h-4 w-4" /> 
+                          Pair Device
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -1172,15 +1173,12 @@ export default function WardenDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg">Add Sentinel</AlertDialogTitle>
             <AlertDialogDescription>
-              Enter the sentinel and warden details. You can pair with a device later.
+              Enter the sentinel details. You can pair with a device later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1"><Label>Name of the Sentinel</Label>
               <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Juan Dela Cruz" />
-            </div>
-            <div className="space-y-1"><Label>Number of the Warden</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63 9XX XXX XXXX" />
             </div>
             <div className="space-y-1"><Label>Notes</Label>
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Allergies, conditions…" />
@@ -1201,7 +1199,6 @@ export default function WardenDashboard() {
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1"><Label>Full Name</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
-            <div className="space-y-1"><Label>Phone</Label><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></div>
             <div className="space-y-1"><Label>Notes</Label><Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} /></div>
           </div>
           <AlertDialogFooter>

@@ -80,6 +80,9 @@ const char* FX_SECRET   = "33282c89d2bc12d1f7a574d62c482dcac8162d21d2f38cf291682
 // ====== DEVICE ID ======
 String HW_UID = "soteria-device-001";
 
+// ====== TIMING CONSTANTS ======
+#define HEALTH_REPORT_INTERVAL_MS 300000  // 5 minutes (300,000ms)
+
 // ====== STATE / PERSIST ======
 Preferences prefs;
 String guardianMsisdn = "";
@@ -972,8 +975,8 @@ void loop(){
   // Read incoming SMS
   readIncomingSMS();
   
-  // Periodic health reporting (enhanced with device metrics)
-  if (now - lastHealth > 60000){
+  // Periodic health reporting every 5 minutes (enhanced with device metrics)
+  if (now - lastHealth > HEALTH_REPORT_INTERVAL_MS){
     lastHealth = now;
     if (hasToken()) {  // Only send if paired
       char buf[128];

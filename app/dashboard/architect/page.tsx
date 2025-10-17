@@ -87,6 +87,24 @@ type UserProfile = {
   sentinel_count?: number;
 };
 
+type DeviceRegistration = {
+  id: string;
+  imei: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string | null;
+  model: string | null;
+  purchase_order: string | null;
+  notes: string | null;
+  status: 'prepared' | 'shipped' | 'registered' | 'activated';
+  prepared_at: string;
+  shipped_at: string | null;
+  registered_at: string | null;
+  activated_at: string | null;
+  prepared_by: string;
+  registered_by: string | null;
+};
+
 export default function ArchitectDashboard() {
   const router = useRouter();
 
@@ -113,7 +131,7 @@ export default function ArchitectDashboard() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"devices" | "providers" | "users">("devices");
+  const [activeTab, setActiveTab] = useState<"devices" | "providers" | "users" | "preregistration">("devices");
 
   // Device management
   const [devices, setDevices] = useState<DeviceRow[]>([]);
@@ -159,6 +177,20 @@ export default function ArchitectDashboard() {
   const [openPromoteUser, setOpenPromoteUser] = useState(false);
   const [promotionRole, setPromotionRole] = useState<'provider' | 'architect'>('provider');
   const [companyName, setCompanyName] = useState(""); // For provider promotion
+
+  // Device pre-registration
+  const [preRegistrations, setPreRegistrations] = useState<any[]>([]);
+  const [preRegSearch, setPreRegSearch] = useState("");
+  const [openPreReg, setOpenPreReg] = useState(false);
+  const [preRegForm, setPreRegForm] = useState({
+    imei: "",
+    customer_name: "",
+    customer_email: "",
+    customer_phone: "",
+    model: "",
+    purchase_order: "",
+    notes: ""
+  });
 
   /* ---------- Data loaders ---------- */
   const normalize = (rows: RawOverview[]): DeviceRow[] =>
@@ -423,6 +455,20 @@ export default function ArchitectDashboard() {
     }
   };
 
+  const loadPreRegistrations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("v_device_registration_overview")
+        .select("*")
+        .order("prepared_at", { ascending: false });
+      
+      if (error) throw error;
+      setPreRegistrations(data ?? []);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to load device pre-registrations.");
+    }
+  };
+
   const promoteUser = async () => {
     try {
       if (!selectedUserForPromotion) throw new Error("No user selected.");
@@ -465,6 +511,7 @@ export default function ArchitectDashboard() {
     loadDevices(); 
     loadProviderData();
     loadUsers();
+    loadPreRegistrations();
   }, []);
 
   /* ---------- Actions ---------- */
@@ -553,6 +600,66 @@ export default function ArchitectDashboard() {
     }
   };
 
+  const addPreRegistration = async () => {
+    try {
+      if (!preRegForm.imei.trim() || !preRegForm.customer_name.trim() || !preRegForm.customer_email.trim()) {
+        throw new Error("IMEI, customer name, and email are required.");
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated.");
+
+      const { error } = await supabase
+        .from("device_registrations")
+        .insert({
+          imei: preRegForm.imei.trim(),
+          customer_name: preRegForm.customer_name.trim(),
+          customer_email: preRegForm.customer_email.trim(),
+          customer_phone: preRegForm.customer_phone.trim() || null,
+          model: preRegForm.model.trim() || null,
+          purchase_order: preRegForm.purchase_order.trim() || null,
+          notes: preRegForm.notes.trim() || null,
+          prepared_by: user.id,
+          status: 'prepared'
+        });
+
+      if (error) throw error;
+      
+      setSuccessMsg("Device pre-registered successfully.");
+      setOpenPreReg(false);
+      setPreRegForm({
+        imei: "",
+        customer_name: "",
+        customer_email: "",
+        customer_phone: "",
+        model: "",
+        purchase_order: "",
+        notes: ""
+      });
+      await loadPreRegistrations();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to pre-register device.");
+    }
+  };
+
+  const markAsShipped = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("device_registrations")
+        .update({
+          status: 'shipped',
+          shipped_at: new Date().toISOString()
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+      setSuccessMsg("Device marked as shipped.");
+      await loadPreRegistrations();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to update shipping status.");
+    }
+  };
+
   /* ---------- Derived ---------- */
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -567,6 +674,21 @@ export default function ArchitectDashboard() {
       ].some((v) => v.toLowerCase().includes(q))
     );
   }, [devices, search]);
+
+  const filteredPreRegs = useMemo(() => {
+    const q = preRegSearch.trim().toLowerCase();
+    if (!q) return preRegistrations;
+    return preRegistrations.filter((reg: DeviceRegistration) =>
+      [
+        reg.imei,
+        reg.customer_name,
+        reg.customer_email,
+        reg.model ?? "",
+        reg.purchase_order ?? "",
+        reg.status,
+      ].some((v) => v.toLowerCase().includes(q))
+    );
+  }, [preRegistrations, preRegSearch]);
 
   /* ---------- UI ---------- */
   return (
@@ -612,11 +734,15 @@ export default function ArchitectDashboard() {
               </CardDescription>
             </CardHeader>
             
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "devices" | "providers" | "users")}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "devices" | "providers" | "users" | "preregistration")}>
               <TabsList className="mx-6 mb-4">
                 <TabsTrigger value="devices" className="flex items-center gap-2">
                   <Smartphone className="h-4 w-4" />
                   Device Management
+                </TabsTrigger>
+                <TabsTrigger value="preregistration" className="flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Pre-Registration
                 </TabsTrigger>
                 <TabsTrigger value="providers" className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
@@ -721,6 +847,129 @@ export default function ArchitectDashboard() {
                 </Card>
               )}
                 </CardContent>
+              </TabsContent>
+
+              <TabsContent value="preregistration" className="mt-0">
+                <div className="px-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Device Pre-Registration</h3>
+                      <p className="text-sm text-gray-600">
+                        Pre-register devices with customer information before shipping.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => setOpenPreReg(true)} 
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Pre-Register Device
+                    </Button>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <Input
+                      value={preRegSearch}
+                      onChange={(e) => setPreRegSearch(e.target.value)}
+                      placeholder="Search by IMEI, customer name, email, model, or status..."
+                      className="bg-white/80"
+                    />
+                  </div>
+
+                  <div className="space-y-4 pb-6">
+                    {filteredPreRegs.length > 0 ? (
+                      filteredPreRegs.map((reg: DeviceRegistration) => (
+                        <Card key={reg.id} className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge 
+                                    variant={
+                                      reg.status === 'prepared' ? 'default' :
+                                      reg.status === 'shipped' ? 'secondary' :
+                                      reg.status === 'registered' ? 'outline' :
+                                      'destructive'
+                                    }
+                                  >
+                                    {reg.status.charAt(0).toUpperCase() + reg.status.slice(1)}
+                                  </Badge>
+                                  <span className="text-sm text-gray-500">
+                                    {new Date(reg.prepared_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">IMEI/HW UID</p>
+                                    <p className="font-mono text-sm font-medium">{reg.imei}</p>
+                                  </div>
+                                  
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Customer</p>
+                                    <p className="text-sm font-medium">{reg.customer_name}</p>
+                                    <p className="text-xs text-gray-600">{reg.customer_email}</p>
+                                    {reg.customer_phone && (
+                                      <p className="text-xs text-gray-600">{reg.customer_phone}</p>
+                                    )}
+                                  </div>
+                                  
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Device Info</p>
+                                    {reg.model && <p className="text-sm">{reg.model}</p>}
+                                    {reg.purchase_order && (
+                                      <p className="text-xs text-gray-600">PO: {reg.purchase_order}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {reg.notes && (
+                                  <div className="mt-2">
+                                    <p className="text-xs text-gray-500 uppercase">Notes</p>
+                                    <p className="text-sm text-gray-700">{reg.notes}</p>
+                                  </div>
+                                )}
+                                
+                                {(reg.shipped_at || reg.registered_at || reg.activated_at) && (
+                                  <div className="mt-2 text-xs text-gray-500 space-y-1">
+                                    {reg.shipped_at && (
+                                      <p>Shipped: {new Date(reg.shipped_at).toLocaleDateString()}</p>
+                                    )}
+                                    {reg.registered_at && (
+                                      <p>Registered: {new Date(reg.registered_at).toLocaleDateString()}</p>
+                                    )}
+                                    {reg.activated_at && (
+                                      <p>Activated: {new Date(reg.activated_at).toLocaleDateString()}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="flex gap-2">
+                                {reg.status === 'prepared' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => markAsShipped(reg.id)}
+                                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                  >
+                                    Mark as Shipped
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <Card className="border-emerald-100 bg-white/70">
+                        <CardContent className="py-6 text-gray-600">
+                          No device pre-registrations match your search.
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="providers" className="mt-0">
@@ -1201,6 +1450,122 @@ export default function ArchitectDashboard() {
               className={promotionRole === 'architect' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-emerald-600 hover:bg-emerald-700'}
             >
               Promote to {promotionRole === 'provider' ? 'Provider' : 'Architect'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pre-Registration Modal */}
+      <Dialog open={openPreReg} onOpenChange={setOpenPreReg}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Pre-Register Device</DialogTitle>
+            <DialogDescription>
+              Add device IMEI with customer information before shipping. Customer will register using this IMEI.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="imei">IMEI / HW UID *</Label>
+              <Input
+                id="imei"
+                value={preRegForm.imei}
+                onChange={(e) => setPreRegForm(prev => ({...prev, imei: e.target.value}))}
+                placeholder="Enter device IMEI or hardware UID..."
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="customer_name">Customer Name *</Label>
+                <Input
+                  id="customer_name"
+                  value={preRegForm.customer_name}
+                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_name: e.target.value}))}
+                  placeholder="Customer full name..."
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="customer_email">Customer Email *</Label>
+                <Input
+                  id="customer_email"
+                  type="email"
+                  value={preRegForm.customer_email}
+                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_email: e.target.value}))}
+                  placeholder="customer@example.com"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="customer_phone">Customer Phone</Label>
+                <Input
+                  id="customer_phone"
+                  value={preRegForm.customer_phone}
+                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_phone: e.target.value}))}
+                  placeholder="Phone number..."
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="model">Device Model</Label>
+                <Input
+                  id="model"
+                  value={preRegForm.model}
+                  onChange={(e) => setPreRegForm(prev => ({...prev, model: e.target.value}))}
+                  placeholder="ESP32-S3, etc..."
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="purchase_order">Purchase Order</Label>
+              <Input
+                id="purchase_order"
+                value={preRegForm.purchase_order}
+                onChange={(e) => setPreRegForm(prev => ({...prev, purchase_order: e.target.value}))}
+                placeholder="PO number or order reference..."
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={preRegForm.notes}
+                onChange={(e) => setPreRegForm(prev => ({...prev, notes: e.target.value}))}
+                placeholder="Additional notes, shipping instructions, etc..."
+                className="min-h-[80px]"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setOpenPreReg(false);
+                setPreRegForm({
+                  imei: "",
+                  customer_name: "",
+                  customer_email: "",
+                  customer_phone: "",
+                  model: "",
+                  purchase_order: "",
+                  notes: ""
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={addPreRegistration}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              Pre-Register Device
             </Button>
           </DialogFooter>
         </DialogContent>
