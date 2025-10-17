@@ -24,6 +24,51 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 
+/* ---------- QR Code Component ---------- */
+const QRCodeDisplay = ({ qrUrl, className = "" }: { qrUrl: string; className?: string }) => {
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+
+  useEffect(() => {
+    const generateQR = async () => {
+      try {
+        const QRCode = await import('qrcode');
+        const canvas = document.createElement('canvas');
+        await QRCode.toCanvas(canvas, qrUrl, { 
+          width: 120,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+        setQrDataUrl(canvas.toDataURL());
+      } catch (error) {
+        console.error('Failed to generate QR code:', error);
+      }
+    };
+
+    if (qrUrl) {
+      generateQR();
+    }
+  }, [qrUrl]);
+
+  if (!qrDataUrl) {
+    return (
+      <div className={`w-[120px] h-[120px] bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center rounded-lg ${className}`}>
+        <QrCode className="h-8 w-8 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={qrDataUrl} 
+      alt="QR Code" 
+      className={`w-[120px] h-[120px] border border-gray-200 rounded-lg ${className}`}
+    />
+  );
+};
+
 /* ---------- Types ---------- */
 type RawOverview = {
   device_id?: string;
@@ -924,8 +969,17 @@ export default function ArchitectDashboard() {
 
                       {filteredQrCodes.map((qr) => (
                         <Card key={qr.id} className="border-emerald-100 bg-white/80 mb-3">
-                          <CardContent className="py-3">
-                            <div className="flex items-center justify-between gap-4">
+                          <CardContent className="py-4">
+                            <div className="flex items-start gap-4">
+                              {/* QR Code Display */}
+                              <div className="flex-shrink-0">
+                                <QRCodeDisplay 
+                                  qrUrl={`${window.location.origin}/activate/${qr.qr_code}`}
+                                  className="shadow-sm"
+                                />
+                              </div>
+                              
+                              {/* QR Details */}
                               <div className="min-w-0 flex-1">
                                 <div className="font-medium text-gray-800 truncate">
                                   IMEI: {qr.imei} • SIM: {qr.sim_number}
@@ -959,42 +1013,44 @@ export default function ArchitectDashboard() {
                                     Assigned to: {qr.sentinel_name}
                                   </div>
                                 )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const qrUrl = `${window.location.origin}/activate/${qr.qr_code}`;
-                                    navigator.clipboard.writeText(qrUrl);
-                                    setSuccessMsg("Activation URL copied to clipboard!");
-                                  }}
-                                >
-                                  Copy URL
-                                </Button>
-                                {qr.status === 'pending' && (
+                                
+                                {/* Action Buttons */}
+                                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => {
-                                      // Generate and download QR code image
                                       const qrUrl = `${window.location.origin}/activate/${qr.qr_code}`;
-                                      const canvas = document.createElement('canvas');
-                                      import('qrcode').then(QRCode => {
-                                        QRCode.toCanvas(canvas, qrUrl, { width: 256 }, (error: any) => {
-                                          if (!error) {
-                                            const link = document.createElement('a');
-                                            link.download = `qr-${qr.imei}.png`;
-                                            link.href = canvas.toDataURL();
-                                            link.click();
-                                          }
-                                        });
-                                      });
+                                      navigator.clipboard.writeText(qrUrl);
+                                      setSuccessMsg("Activation URL copied to clipboard!");
                                     }}
                                   >
-                                    Download QR
+                                    Copy URL
                                   </Button>
-                                )}
+                                  {qr.status === 'pending' && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        // Generate and download QR code image
+                                        const qrUrl = `${window.location.origin}/activate/${qr.qr_code}`;
+                                        const canvas = document.createElement('canvas');
+                                        import('qrcode').then(QRCode => {
+                                          QRCode.toCanvas(canvas, qrUrl, { width: 256 }, (error: any) => {
+                                            if (!error) {
+                                              const link = document.createElement('a');
+                                              link.download = `qr-${qr.imei}.png`;
+                                              link.href = canvas.toDataURL();
+                                              link.click();
+                                            }
+                                          });
+                                        });
+                                      }}
+                                    >
+                                      Download QR
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </CardContent>
