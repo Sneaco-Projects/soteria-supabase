@@ -932,11 +932,12 @@ export default function ArchitectDashboard() {
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                                   <Badge 
-                                    variant={qr.status === 'activated' ? 'default' : 'secondary'}
-                                    className={qr.status === 'activated' ? 'bg-green-100 text-green-800' : ''}
+                                    variant={qr.status === 'activated' || qr.status === 'paired' ? 'default' : 'secondary'}
+                                    className={qr.status === 'activated' || qr.status === 'paired' ? 'bg-green-100 text-green-800' : ''}
                                   >
-                                    {qr.status === 'generated' ? 'Pending' : 
-                                     qr.status === 'activated' ? 'Activated' : qr.status}
+                                    {qr.status === 'pending' ? 'Pending' : 
+                                     qr.status === 'activated' ? 'Activated' : 
+                                     qr.status === 'paired' ? 'Paired' : qr.status}
                                   </Badge>
                                   {qr.device_model && (
                                     <span className="text-gray-500">Model: {qr.device_model}</span>
@@ -971,7 +972,7 @@ export default function ArchitectDashboard() {
                                 >
                                   Copy URL
                                 </Button>
-                                {qr.status === 'generated' && (
+                                {qr.status === 'pending' && (
                                   <Button
                                     variant="outline"
                                     size="sm"
