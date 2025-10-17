@@ -652,26 +652,45 @@ export default function ArchitectDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated.");
 
-      // Generate unique QR code string
-      const qrCodeId = crypto.randomUUID();
-      const qrTokenResult = await supabase.rpc('generate_qr_token');
-      const qrToken = qrTokenResult?.data || crypto.randomUUID().substring(0, 8).toUpperCase();
-      const qrCodeUrl = `${window.location.origin}/activate/${qrToken}`;
-
-      const { error } = await supabase
+      // Insert QR code record - let the database trigger generate the qr_token
+      const { data: insertedQr, error } = await supabase
         .from("device_qr_codes")
         .insert({
           imei: qrForm.imei.trim(),
           sim_number: qrForm.sim_number.trim(),
-          qr_code: qrCodeId,
-          qr_token: qrToken,
-          qr_url: qrCodeUrl,
           device_model: qrForm.device_model.trim() || null,
           notes: qrForm.notes.trim() || null,
           generated_by: user.id
-        });
+        })
+        .select('qr_token')
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('QR Insert Error:', error);
+        throw error;
+      }
+
+      // Now get the generated token and create the URL
+      const qrToken = insertedQr.qr_token;
+      const qrCodeUrl = `${window.location.origin}/activate/${qrToken}`;
+
+      // Update the record with the URL
+      const { error: updateError } = await supabase
+        .from("device_qr_codes")
+        .update({ qr_url: qrCodeUrl })
+        .eq('qr_token', qrToken);
+
+      if (updateError) {
+        console.error('QR Update Error:', updateError);
+        // Don't throw here since the main record was created successfully
+      }
+
+      // Debug: Log what was generated
+      console.log('QR Generation Debug:', {
+        qrToken,
+        qrCodeUrl,
+        insertedQr
+      });
       
       setSuccessMsg("QR code generated successfully.");
       setOpenQrGenerate(false);

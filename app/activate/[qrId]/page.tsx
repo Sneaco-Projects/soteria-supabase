@@ -67,40 +67,65 @@ export default function DeviceActivation() {
         setLoading(true);
 
         // Load QR code data (allow any status for better UX)
+        console.log('Activation Debug - Looking for qrId:', qrId);
+        
         const { data: qrCode, error: qrError } = await supabase
           .from("device_qr_codes")
           .select("*")
           .eq("qr_token", qrId)
           .maybeSingle();
 
-        if (qrError) throw qrError;
+        console.log('Activation Debug - Query result:', { qrCode, qrError });
+
+        if (qrError) {
+          console.error('QR Lookup Error:', qrError);
+          throw qrError;
+        }
         
-        if (!qrCode) {
-          setError("Invalid QR code. Please contact support.");
-          return;
+        let foundQrCode = qrCode;
+        
+        if (!foundQrCode) {
+          console.log('QR Code not found for token:', qrId);
+          
+          // Try alternative lookup by qr_code field as fallback
+          const { data: qrCodeAlt, error: qrErrorAlt } = await supabase
+            .from("device_qr_codes")
+            .select("*")
+            .eq("qr_code", qrId)
+            .maybeSingle();
+          
+          console.log('Alternative lookup result:', { qrCodeAlt, qrErrorAlt });
+          
+          if (qrCodeAlt) {
+            console.log('Found QR code using qr_code field instead');
+            foundQrCode = qrCodeAlt;
+          } else {
+            setError("Invalid QR code. Please contact support.");
+            return;
+          }
         }
 
         // Check if QR code is expired
-        if (qrCode.expires_at && new Date(qrCode.expires_at) < new Date()) {
+        if (foundQrCode.expires_at && new Date(foundQrCode.expires_at) < new Date()) {
           setError("This QR code has expired. Please contact support for a new activation code.");
           return;
         }
 
-        setQrData(qrCode);
+        setQrData(foundQrCode);
 
         // Check if already activated
-        if (qrCode.status === "activated") {
+        if (foundQrCode.status === "activated") {
           setAlreadyActivated(true);
           
           // Load device and sentinel info for already activated QR codes
-          if (qrCode.device_id) {
+          if (foundQrCode.device_id) {
             const { data: deviceInfo, error: deviceError } = await supabase
               .from("devices")
               .select(`
                 *,
                 sentinel:sentinels(id, full_name)
               `)
-              .eq("id", qrCode.device_id)
+              .eq("id", foundQrCode.device_id)
               .maybeSingle();
 
             if (!deviceError && deviceInfo) {
@@ -174,7 +199,7 @@ export default function DeviceActivation() {
           model: qrData.device_model || "Soteria Device",
           sentinel_id: selectedSentinel,
           available: false, // Device is now paired
-          owner_id: user.id
+          phone: qrData.sim_number // Store SIM number in phone field
         })
         .select()
         .single();
