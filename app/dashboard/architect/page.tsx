@@ -1501,7 +1501,81 @@ export default function ArchitectDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* QR Code Generation Dialog - Temporarily removed for debugging */}
+      {/* QR Code Generation Dialog */}
+      <Dialog open={openQrGenerate} onOpenChange={setOpenQrGenerate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Device QR Code</DialogTitle>
+            <DialogDescription>
+              Create a QR code for device activation. The customer will scan this to automatically activate and pair their device.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="imei">IMEI Number *</Label>
+              <Input
+                id="imei"
+                value={qrForm.imei}
+                onChange={(e) => setQrForm({ ...qrForm, imei: e.target.value })}
+                placeholder="Enter device IMEI number"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sim_number">SIM Number *</Label>
+              <Input
+                id="sim_number"
+                value={qrForm.sim_number}
+                onChange={(e) => setQrForm({ ...qrForm, sim_number: e.target.value })}
+                placeholder="Enter SIM card number"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="device_model">Device Model (Optional)</Label>
+              <Input
+                id="device_model"
+                value={qrForm.device_model}
+                onChange={(e) => setQrForm({ ...qrForm, device_model: e.target.value })}
+                placeholder="e.g., Soteria Guardian Pro"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes (Optional)</Label>
+              <Input
+                id="notes"
+                value={qrForm.notes}
+                onChange={(e) => setQrForm({ ...qrForm, notes: e.target.value })}
+                placeholder="Additional notes for this device"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setOpenQrGenerate(false);
+                setQrForm({
+                  imei: "",
+                  sim_number: "",
+                  device_model: "",
+                  notes: ""
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={generateQrCode}
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={!qrForm.imei.trim() || !qrForm.sim_number.trim()}
+            >
+              <QrCode className="mr-2 h-4 w-4" />
+              Generate QR Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </>
   );
