@@ -20,13 +20,8 @@ export default function SignUpForm() {
   const [showPassword, setShowPassword]             = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
-    firstName: "", lastName: "", email: "", phone: "", imei: "", password: "", confirmPassword: "",
+    firstName: "", lastName: "", email: "", phone: "", password: "", confirmPassword: "",
   });
-  const [imeiValidation, setImeiValidation] = useState<{
-    isValid: boolean;
-    message: string;
-    isChecking: boolean;
-  }>({ isValid: false, message: "", isChecking: false });
   const [loading, setLoading] = useState(false);
 
   // modals
@@ -36,65 +31,8 @@ export default function SignUpForm() {
 
   const router = useRouter();
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
-    
-    // Validate IMEI when it changes
-    if (field === 'imei') {
-      validateImei(value);
-    }
-  };
-
-  const validateImei = async (imei: string) => {
-    if (!imei.trim()) {
-      setImeiValidation({ isValid: false, message: "", isChecking: false });
-      return;
-    }
-
-    setImeiValidation({ isValid: false, message: "", isChecking: true });
-
-    try {
-      const { data, error } = await supabase
-        .from("device_registrations")
-        .select("id, status, customer_name, customer_email")
-        .eq("imei", imei.trim())
-        .eq("status", "prepared")
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!data) {
-        setImeiValidation({ 
-          isValid: false, 
-          message: "Device not found or not available for registration. Please contact support.", 
-          isChecking: false 
-        });
-        return;
-      }
-
-      if (data.status !== "prepared") {
-        setImeiValidation({ 
-          isValid: false, 
-          message: "Device has already been registered or shipped.", 
-          isChecking: false 
-        });
-        return;
-      }
-
-      setImeiValidation({ 
-        isValid: true, 
-        message: `Device found for ${data.customer_name}`, 
-        isChecking: false 
-      });
-
-    } catch (err: any) {
-      setImeiValidation({ 
-        isValid: false, 
-        message: "Error validating device. Please try again.", 
-        isChecking: false 
-      });
-    }
-  };
 
   // INLINE routeByRole (no shared helper)
   const routeByRole = async () => {
@@ -156,16 +94,11 @@ export default function SignUpForm() {
       setErrorMsg("Passwords do not match.");
       return;
     }
-    if (!imeiValidation.isValid) {
-      setErrorMsg("Please enter a valid device IMEI/HW_UID.");
-      return;
-    }
 
     setLoading(true);
     try {
       const display_name = `${formData.firstName} ${formData.lastName}`.trim();
 
-      // First, create the user account
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -173,78 +106,9 @@ export default function SignUpForm() {
       });
       if (error) throw error;
 
-      // Auto-activate device and update registration status
-      if (data.user) {
-        try {
-          // First, check if device already exists
-          const { data: existingDevice, error: deviceCheckError } = await supabase
-            .from("devices")
-            .select("id")
-            .eq("hw_uid", formData.imei.trim())
-            .maybeSingle();
-
-          if (deviceCheckError) throw deviceCheckError;
-
-          // Create device if it doesn't exist
-          if (!existingDevice) {
-            // Get device model from registration
-            const { data: regData, error: regFetchError } = await supabase
-              .from("device_registrations")
-              .select("model")
-              .eq("imei", formData.imei.trim())
-              .maybeSingle();
-
-            const { error: deviceCreateError } = await supabase
-              .from("devices")
-              .insert({
-                hw_uid: formData.imei.trim(),
-                model: regData?.model || "ESP32-Soteria",
-                available: true,
-                phone: formData.phone, // Store contact phone for legacy compatibility
-                owner_id: data.user.id // Link device to user account
-              });
-
-            if (deviceCreateError) throw deviceCreateError;
-          } else {
-            // If device exists, update the owner
-            const { error: deviceUpdateError } = await supabase
-              .from("devices")
-              .update({ owner_id: data.user.id })
-              .eq("hw_uid", formData.imei.trim());
-
-            if (deviceUpdateError) throw deviceUpdateError;
-          }
-
-          // Update device registration to activated status
-          const { error: regError } = await supabase
-            .from("device_registrations")
-            .update({
-              status: "activated",
-              registered_at: new Date().toISOString(),
-              activated_at: new Date().toISOString(),
-              registered_by: data.user.id
-            })
-            .eq("imei", formData.imei.trim());
-
-          if (regError) throw regError;
-
-        } catch (activationError) {
-          console.error("Failed to activate device:", activationError);
-          // Don't fail the signup for this, but update registration status at minimum
-          const { error: regError } = await supabase
-            .from("device_registrations")
-            .update({
-              status: "registered",
-              registered_at: new Date().toISOString(),
-              registered_by: data.user.id
-            })
-            .eq("imei", formData.imei.trim());
-        }
-      }
-
       // If confirmations are ON, no session yet → show success modal then route to signin after OK.
       if (!data.session) {
-        setSuccessMsg("Warden account created and device activated! Check your email to confirm, then sign in to start protecting your family.");
+        setSuccessMsg("Warden account created! Check your email to confirm, then sign in to start protecting your family.");
         setPendingRedirect("/auth/signin");
         return;
       }
@@ -347,7 +211,7 @@ export default function SignUpForm() {
               <h4 className="font-semibold text-emerald-800 mb-2 text-sm">What happens after you sign up:</h4>
               <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
                 <li>Add your family members as "sentinels" in your dashboard</li>
-                <li>Get safety devices and pair them with your sentinels</li>
+                <li>Pair your safety device using the device ID when you receive it</li>
                 <li>Your sentinels carry the devices - that's it!</li>
                 <li>You receive alerts and can help in emergencies</li>
               </ol>
@@ -404,33 +268,6 @@ export default function SignUpForm() {
                   required
                 />
                 <p className="text-xs text-gray-500">This is where you'll receive emergency alerts from your sentinels</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="imei" className="text-gray-700">Device IMEI / HW UID</Label>
-                <Input
-                  id="imei"
-                  placeholder="Enter the IMEI/HW_UID from your device package"
-                  value={formData.imei}
-                  onChange={(e) => handleInputChange("imei", e.target.value)}
-                  className={`bg-white/80 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500 ${
-                    imeiValidation.isChecking ? 'border-yellow-300' : 
-                    formData.imei && !imeiValidation.isValid ? 'border-red-300' :
-                    formData.imei && imeiValidation.isValid ? 'border-green-300' : ''
-                  }`}
-                  required
-                />
-                {imeiValidation.isChecking && (
-                  <p className="text-xs text-yellow-600">Validating device...</p>
-                )}
-                {formData.imei && !imeiValidation.isChecking && (
-                  <p className={`text-xs ${imeiValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
-                    {imeiValidation.message}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500">
-                  Find this on your device package or contact support if you need assistance
-                </p>
               </div>
 
               <div className="space-y-2">

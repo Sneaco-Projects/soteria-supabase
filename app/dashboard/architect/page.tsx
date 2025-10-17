@@ -13,7 +13,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 
-import { AlertTriangle, CheckCircle, Pencil, Trash2, Users, Plus, UserCheck, Smartphone, Crown, Shield } from "lucide-react";
+import { AlertTriangle, CheckCircle, Pencil, Trash2, Users, Plus, UserCheck, Smartphone, Crown, Shield, QrCode, Menu, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger 
@@ -87,22 +87,20 @@ type UserProfile = {
   sentinel_count?: number;
 };
 
-type DeviceRegistration = {
+type DeviceQRCode = {
   id: string;
   imei: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string | null;
-  model: string | null;
-  purchase_order: string | null;
+  sim_number: string;
+  qr_code: string;
+  device_model: string | null;
   notes: string | null;
-  status: 'prepared' | 'shipped' | 'registered' | 'activated';
-  prepared_at: string;
-  shipped_at: string | null;
-  registered_at: string | null;
+  generated_at: string;
   activated_at: string | null;
-  prepared_by: string;
-  registered_by: string | null;
+  device_id: string | null;
+  generated_by_name: string | null;
+  activated_by_name: string | null;
+  sentinel_name: string | null;
+  status: 'pending' | 'activated' | 'paired';
 };
 
 export default function ArchitectDashboard() {
@@ -130,8 +128,8 @@ export default function ArchitectDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<"devices" | "providers" | "users" | "preregistration">("devices");
+  // Navigation state
+  const [activeTab, setActiveTab] = useState<"devices" | "qr-codes" | "providers" | "users">("devices");
 
   // Device management
   const [devices, setDevices] = useState<DeviceRow[]>([]);
@@ -178,19 +176,19 @@ export default function ArchitectDashboard() {
   const [promotionRole, setPromotionRole] = useState<'provider' | 'architect'>('provider');
   const [companyName, setCompanyName] = useState(""); // For provider promotion
 
-  // Device pre-registration
-  const [preRegistrations, setPreRegistrations] = useState<any[]>([]);
-  const [preRegSearch, setPreRegSearch] = useState("");
-  const [openPreReg, setOpenPreReg] = useState(false);
-  const [preRegForm, setPreRegForm] = useState({
+  // QR Code management
+  const [qrCodes, setQrCodes] = useState<DeviceQRCode[]>([]);
+  const [qrSearch, setQrSearch] = useState("");
+  const [openQrGenerate, setOpenQrGenerate] = useState(false);
+  const [qrForm, setQrForm] = useState({
     imei: "",
-    customer_name: "",
-    customer_email: "",
-    customer_phone: "",
-    model: "",
-    purchase_order: "",
+    sim_number: "",
+    device_model: "",
     notes: ""
   });
+
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   /* ---------- Data loaders ---------- */
   const normalize = (rows: RawOverview[]): DeviceRow[] =>
@@ -455,20 +453,6 @@ export default function ArchitectDashboard() {
     }
   };
 
-  const loadPreRegistrations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("v_device_registration_overview")
-        .select("*")
-        .order("prepared_at", { ascending: false });
-      
-      if (error) throw error;
-      setPreRegistrations(data ?? []);
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to load device pre-registrations.");
-    }
-  };
-
   const promoteUser = async () => {
     try {
       if (!selectedUserForPromotion) throw new Error("No user selected.");
@@ -511,7 +495,7 @@ export default function ArchitectDashboard() {
     loadDevices(); 
     loadProviderData();
     loadUsers();
-    loadPreRegistrations();
+    loadQrCodes();
   }, []);
 
   /* ---------- Actions ---------- */
@@ -600,63 +584,60 @@ export default function ArchitectDashboard() {
     }
   };
 
-  const addPreRegistration = async () => {
+  const loadQrCodes = async () => {
     try {
-      if (!preRegForm.imei.trim() || !preRegForm.customer_name.trim() || !preRegForm.customer_email.trim()) {
-        throw new Error("IMEI, customer name, and email are required.");
+      const { data, error } = await supabase
+        .from("v_architect_qr_overview")
+        .select("*")
+        .order("generated_at", { ascending: false });
+      
+      if (error) throw error;
+      setQrCodes(data ?? []);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Failed to load QR codes.");
+    }
+  };
+
+  const generateQrCode = async () => {
+    try {
+      if (!qrForm.imei.trim() || !qrForm.sim_number.trim()) {
+        throw new Error("IMEI and SIM number are required.");
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated.");
 
+      // Generate unique QR code string
+      const qrCodeId = crypto.randomUUID();
+      const qrToken = await supabase.rpc('generate_qr_token');
+      const qrCodeUrl = `${window.location.origin}/activate/${qrCodeId}`;
+
       const { error } = await supabase
-        .from("device_registrations")
+        .from("device_qr_codes")
         .insert({
-          imei: preRegForm.imei.trim(),
-          customer_name: preRegForm.customer_name.trim(),
-          customer_email: preRegForm.customer_email.trim(),
-          customer_phone: preRegForm.customer_phone.trim() || null,
-          model: preRegForm.model.trim() || null,
-          purchase_order: preRegForm.purchase_order.trim() || null,
-          notes: preRegForm.notes.trim() || null,
-          prepared_by: user.id,
-          status: 'prepared'
+          imei: qrForm.imei.trim(),
+          sim_number: qrForm.sim_number.trim(),
+          qr_code: qrCodeId,
+          qr_token: qrToken?.data || crypto.randomUUID().substring(0, 8).toUpperCase(),
+          qr_url: qrCodeUrl,
+          device_model: qrForm.device_model.trim() || null,
+          notes: qrForm.notes.trim() || null,
+          generated_by: user.id
         });
 
       if (error) throw error;
       
-      setSuccessMsg("Device pre-registered successfully.");
-      setOpenPreReg(false);
-      setPreRegForm({
+      setSuccessMsg("QR code generated successfully.");
+      setOpenQrGenerate(false);
+      setQrForm({
         imei: "",
-        customer_name: "",
-        customer_email: "",
-        customer_phone: "",
-        model: "",
-        purchase_order: "",
+        sim_number: "",
+        device_model: "",
         notes: ""
       });
-      await loadPreRegistrations();
+      await loadQrCodes();
     } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to pre-register device.");
-    }
-  };
-
-  const markAsShipped = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from("device_registrations")
-        .update({
-          status: 'shipped',
-          shipped_at: new Date().toISOString()
-        })
-        .eq("id", id);
-
-      if (error) throw error;
-      setSuccessMsg("Device marked as shipped.");
-      await loadPreRegistrations();
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? "Failed to update shipping status.");
+      setErrorMsg(e?.message ?? "Failed to generate QR code.");
     }
   };
 
@@ -675,20 +656,20 @@ export default function ArchitectDashboard() {
     );
   }, [devices, search]);
 
-  const filteredPreRegs = useMemo(() => {
-    const q = preRegSearch.trim().toLowerCase();
-    if (!q) return preRegistrations;
-    return preRegistrations.filter((reg: DeviceRegistration) =>
+  const filteredQrCodes = useMemo(() => {
+    const q = qrSearch.trim().toLowerCase();
+    if (!q) return qrCodes;
+    return qrCodes.filter((qr) =>
       [
-        reg.imei,
-        reg.customer_name,
-        reg.customer_email,
-        reg.model ?? "",
-        reg.purchase_order ?? "",
-        reg.status,
+        qr.imei,
+        qr.sim_number,
+        qr.device_model ?? "",
+        qr.status,
+        qr.generated_by_name ?? "",
+        qr.activated_by_name ?? "",
       ].some((v) => v.toLowerCase().includes(q))
     );
-  }, [preRegistrations, preRegSearch]);
+  }, [qrCodes, qrSearch]);
 
   /* ---------- UI ---------- */
   return (
@@ -724,57 +705,121 @@ export default function ArchitectDashboard() {
       </AlertDialog>
 
       {/* Page */}
-      <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
-        <div className="relative z-10 p-6 max-w-7xl mx-auto">
-          <Card className="bg-white/90 border-emerald-200 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle>Architect Dashboard</CardTitle>
-              <CardDescription>
-                Manage devices and provider-warden assignments.
-              </CardDescription>
-            </CardHeader>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+        <div className="flex">
+          {/* Sidebar */}
+          <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-emerald-200 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+            <div className="flex items-center justify-between h-16 px-6 border-b border-emerald-200">
+              <h1 className="text-lg font-semibold text-emerald-900">Architect Panel</h1>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
             
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "devices" | "providers" | "users" | "preregistration")}>
-              <TabsList className="mx-6 mb-4">
-                <TabsTrigger value="devices" className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
+            <nav className="mt-8">
+              <div className="px-4 space-y-2">
+                <button
+                  onClick={() => {setActiveTab("devices"); setSidebarOpen(false);}}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-colors ${
+                    activeTab === "devices" 
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-200" 
+                      : "text-gray-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  <Smartphone className="h-5 w-5" />
                   Device Management
-                </TabsTrigger>
-                <TabsTrigger value="preregistration" className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  Pre-Registration
-                </TabsTrigger>
-                <TabsTrigger value="providers" className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
+                </button>
+                
+                <button
+                  onClick={() => {setActiveTab("qr-codes"); setSidebarOpen(false);}}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-colors ${
+                    activeTab === "qr-codes" 
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-200" 
+                      : "text-gray-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  <QrCode className="h-5 w-5" />
+                  Device QR Codes
+                </button>
+                
+                <button
+                  onClick={() => {setActiveTab("providers"); setSidebarOpen(false);}}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-colors ${
+                    activeTab === "providers" 
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-200" 
+                      : "text-gray-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  <Users className="h-5 w-5" />
                   Provider Assignments
-                </TabsTrigger>
-                <TabsTrigger value="users" className="flex items-center gap-2">
-                  <Crown className="h-4 w-4" />
+                </button>
+                
+                <button
+                  onClick={() => {setActiveTab("users"); setSidebarOpen(false);}}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-colors ${
+                    activeTab === "users" 
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-200" 
+                      : "text-gray-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  <Crown className="h-5 w-5" />
                   User Management
-                </TabsTrigger>
-              </TabsList>
+                </button>
+              </div>
+            </nav>
+          </div>
 
-              <TabsContent value="devices" className="mt-0">
-                <div className="px-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">Device Inventory</h3>
-                      <p className="text-sm text-gray-600">
-                        Add devices and mark them <b>Available</b> so Wardens can pair them.
-                      </p>
-                    </div>
-                    <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700">
-                      Add Device
-                    </Button>
-                  </div>
-                  <div className="mb-4">
-                    <Input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search hw_uid, contact #, available/assigned…"
-                      className="bg-white/80"
-                    />
-                  </div>
+          {/* Main Content */}
+          <div className="flex-1 lg:ml-0">
+            {/* Top Bar */}
+            <div className="bg-white border-b border-emerald-200 lg:hidden">
+              <div className="flex items-center justify-between h-16 px-6">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+                <h1 className="text-lg font-semibold text-emerald-900">Architect Dashboard</h1>
+                <div></div>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="p-6">
+              <Card className="bg-white/90 border-emerald-200 shadow-lg">
+                {activeTab === "devices" && (
+                  <div>
+                    <CardHeader className="pb-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-xl">Device Inventory</CardTitle>
+                          <CardDescription>
+                            Manage device inventory. Users can pair any <b>Available</b> device using its Device ID.
+                          </CardDescription>
+                        </div>
+                        <Button onClick={() => setOpenAdd(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Device
+                        </Button>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="pt-0">
+                      <div className="mb-6">
+                        <Input
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          placeholder="Search hw_uid, contact #, available/assigned…"
+                          className="bg-white/80"
+                        />
+                      </div>
                 </div>
                 
                 <CardContent className="px-6 pb-6 space-y-3">
@@ -847,130 +892,121 @@ export default function ArchitectDashboard() {
                 </Card>
               )}
                 </CardContent>
-              </TabsContent>
+                )}
 
-              <TabsContent value="preregistration" className="mt-0">
-                <div className="px-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">Device Pre-Registration</h3>
-                      <p className="text-sm text-gray-600">
-                        Pre-register devices with customer information before shipping.
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={() => setOpenPreReg(true)} 
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Pre-Register Device
-                    </Button>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <Input
-                      value={preRegSearch}
-                      onChange={(e) => setPreRegSearch(e.target.value)}
-                      placeholder="Search by IMEI, customer name, email, model, or status..."
-                      className="bg-white/80"
-                    />
-                  </div>
+                {activeTab === "qr-codes" && (
+                  <div>
+                    <CardHeader className="pb-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-xl">Device QR Codes</CardTitle>
+                          <CardDescription>
+                            Generate QR codes for device activation. Customers scan these to automatically activate their devices.
+                          </CardDescription>
+                        </div>
+                        <Button onClick={() => setOpenQrGenerate(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                          <QrCode className="mr-2 h-4 w-4" />
+                          Generate QR Code
+                        </Button>
+                      </div>
+                    </CardHeader>
 
-                  <div className="space-y-4 pb-6">
-                    {filteredPreRegs.length > 0 ? (
-                      filteredPreRegs.map((reg: DeviceRegistration) => (
-                        <Card key={reg.id} className="border-emerald-100 bg-white/70">
-                          <CardContent className="py-4">
-                            <div className="flex items-start justify-between">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
+                    <CardContent className="pt-0">
+                      <div className="mb-6">
+                        <Input
+                          value={qrSearch}
+                          onChange={(e) => setQrSearch(e.target.value)}
+                          placeholder="Search by IMEI, SIM number, or status..."
+                          className="bg-white/80"
+                        />
+                      </div>
+
+                      {filteredQrCodes.map((qr) => (
+                        <Card key={qr.id} className="border-emerald-100 bg-white/80 mb-3">
+                          <CardContent className="py-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-gray-800 truncate">
+                                  IMEI: {qr.imei} • SIM: {qr.sim_number}
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                                   <Badge 
-                                    variant={
-                                      reg.status === 'prepared' ? 'default' :
-                                      reg.status === 'shipped' ? 'secondary' :
-                                      reg.status === 'registered' ? 'outline' :
-                                      'destructive'
-                                    }
+                                    variant={qr.status === 'activated' ? 'default' : 'secondary'}
+                                    className={qr.status === 'activated' ? 'bg-green-100 text-green-800' : ''}
                                   >
-                                    {reg.status.charAt(0).toUpperCase() + reg.status.slice(1)}
+                                    {qr.status === 'generated' ? 'Pending' : 
+                                     qr.status === 'activated' ? 'Activated' : qr.status}
                                   </Badge>
-                                  <span className="text-sm text-gray-500">
-                                    {new Date(reg.prepared_at).toLocaleDateString()}
+                                  {qr.device_model && (
+                                    <span className="text-gray-500">Model: {qr.device_model}</span>
+                                  )}
+                                  <span className="text-gray-500">
+                                    Generated: {new Date(qr.generated_at).toLocaleDateString()}
                                   </span>
+                                  {qr.activated_at && (
+                                    <span className="text-gray-500">
+                                      Activated: {new Date(qr.activated_at).toLocaleDateString()}
+                                    </span>
+                                  )}
                                 </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  <div>
-                                    <p className="text-xs text-gray-500 uppercase">IMEI/HW UID</p>
-                                    <p className="font-mono text-sm font-medium">{reg.imei}</p>
-                                  </div>
-                                  
-                                  <div>
-                                    <p className="text-xs text-gray-500 uppercase">Customer</p>
-                                    <p className="text-sm font-medium">{reg.customer_name}</p>
-                                    <p className="text-xs text-gray-600">{reg.customer_email}</p>
-                                    {reg.customer_phone && (
-                                      <p className="text-xs text-gray-600">{reg.customer_phone}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div>
-                                    <p className="text-xs text-gray-500 uppercase">Device Info</p>
-                                    {reg.model && <p className="text-sm">{reg.model}</p>}
-                                    {reg.purchase_order && (
-                                      <p className="text-xs text-gray-600">PO: {reg.purchase_order}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                
-                                {reg.notes && (
-                                  <div className="mt-2">
-                                    <p className="text-xs text-gray-500 uppercase">Notes</p>
-                                    <p className="text-sm text-gray-700">{reg.notes}</p>
-                                  </div>
+                                {qr.notes && (
+                                  <div className="mt-1 text-sm text-gray-600">{qr.notes}</div>
                                 )}
-                                
-                                {(reg.shipped_at || reg.registered_at || reg.activated_at) && (
-                                  <div className="mt-2 text-xs text-gray-500 space-y-1">
-                                    {reg.shipped_at && (
-                                      <p>Shipped: {new Date(reg.shipped_at).toLocaleDateString()}</p>
-                                    )}
-                                    {reg.registered_at && (
-                                      <p>Registered: {new Date(reg.registered_at).toLocaleDateString()}</p>
-                                    )}
-                                    {reg.activated_at && (
-                                      <p>Activated: {new Date(reg.activated_at).toLocaleDateString()}</p>
-                                    )}
+                                {qr.sentinel_name && (
+                                  <div className="mt-1 text-sm text-blue-600">
+                                    Assigned to: {qr.sentinel_name}
                                   </div>
                                 )}
                               </div>
-                              
-                              <div className="flex gap-2">
-                                {reg.status === 'prepared' && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const qrUrl = `${window.location.origin}/activate/${qr.qr_code}`;
+                                    navigator.clipboard.writeText(qrUrl);
+                                    setSuccessMsg("Activation URL copied to clipboard!");
+                                  }}
+                                >
+                                  Copy URL
+                                </Button>
+                                {qr.status === 'generated' && (
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => markAsShipped(reg.id)}
-                                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                    onClick={() => {
+                                      // Generate and download QR code image
+                                      const qrUrl = `${window.location.origin}/activate/${qr.qr_code}`;
+                                      const canvas = document.createElement('canvas');
+                                      import('qrcode').then(QRCode => {
+                                        QRCode.toCanvas(canvas, qrUrl, { width: 256 }, (error: any) => {
+                                          if (!error) {
+                                            const link = document.createElement('a');
+                                            link.download = `qr-${qr.imei}.png`;
+                                            link.href = canvas.toDataURL();
+                                            link.click();
+                                          }
+                                        });
+                                      });
+                                    }}
                                   >
-                                    Mark as Shipped
+                                    Download QR
                                   </Button>
                                 )}
                               </div>
                             </div>
                           </CardContent>
                         </Card>
-                      ))
-                    ) : (
-                      <Card className="border-emerald-100 bg-white/70">
-                        <CardContent className="py-6 text-gray-600">
-                          No device pre-registrations match your search.
-                        </CardContent>
-                      </Card>
-                    )}
+                      ))}
+
+                      {filteredQrCodes.length === 0 && (
+                        <Card className="border-emerald-100 bg-white/70">
+                          <CardContent className="py-6 text-gray-600">No QR codes match your search.</CardContent>
+                        </Card>
+                      )}
+                    </CardContent>
                   </div>
-                </div>
-              </TabsContent>
+                )}
 
               <TabsContent value="providers" className="mt-0">
                 <div className="px-6">
@@ -1455,106 +1491,65 @@ export default function ArchitectDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Pre-Registration Modal */}
-      <Dialog open={openPreReg} onOpenChange={setOpenPreReg}>
-        <DialogContent className="max-w-2xl">
+      {/* QR Code Generation Dialog */}
+      <Dialog open={openQrGenerate} onOpenChange={setOpenQrGenerate}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pre-Register Device</DialogTitle>
+            <DialogTitle>Generate Device QR Code</DialogTitle>
             <DialogDescription>
-              Add device IMEI with customer information before shipping. Customer will register using this IMEI.
+              Create a QR code for device activation. The customer will scan this to automatically activate and pair their device.
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="imei">IMEI / HW UID *</Label>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="imei">IMEI Number *</Label>
               <Input
                 id="imei"
-                value={preRegForm.imei}
-                onChange={(e) => setPreRegForm(prev => ({...prev, imei: e.target.value}))}
-                placeholder="Enter device IMEI or hardware UID..."
+                value={qrForm.imei}
+                onChange={(e) => setQrForm({ ...qrForm, imei: e.target.value })}
+                placeholder="Enter device IMEI number"
+                required
               />
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="customer_name">Customer Name *</Label>
-                <Input
-                  id="customer_name"
-                  value={preRegForm.customer_name}
-                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_name: e.target.value}))}
-                  placeholder="Customer full name..."
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="customer_email">Customer Email *</Label>
-                <Input
-                  id="customer_email"
-                  type="email"
-                  value={preRegForm.customer_email}
-                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_email: e.target.value}))}
-                  placeholder="customer@example.com"
-                />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="customer_phone">Customer Phone</Label>
-                <Input
-                  id="customer_phone"
-                  value={preRegForm.customer_phone}
-                  onChange={(e) => setPreRegForm(prev => ({...prev, customer_phone: e.target.value}))}
-                  placeholder="Phone number..."
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="model">Device Model</Label>
-                <Input
-                  id="model"
-                  value={preRegForm.model}
-                  onChange={(e) => setPreRegForm(prev => ({...prev, model: e.target.value}))}
-                  placeholder="ESP32-S3, etc..."
-                />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="purchase_order">Purchase Order</Label>
+            <div className="space-y-2">
+              <Label htmlFor="sim_number">SIM Number *</Label>
               <Input
-                id="purchase_order"
-                value={preRegForm.purchase_order}
-                onChange={(e) => setPreRegForm(prev => ({...prev, purchase_order: e.target.value}))}
-                placeholder="PO number or order reference..."
+                id="sim_number"
+                value={qrForm.sim_number}
+                onChange={(e) => setQrForm({ ...qrForm, sim_number: e.target.value })}
+                placeholder="Enter SIM card number"
+                required
               />
             </div>
-            
-            <div>
+            <div className="space-y-2">
+              <Label htmlFor="device_model">Device Model</Label>
+              <Input
+                id="device_model"
+                value={qrForm.device_model}
+                onChange={(e) => setQrForm({ ...qrForm, device_model: e.target.value })}
+                placeholder="e.g., Soteria Guardian Pro"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea
                 id="notes"
-                value={preRegForm.notes}
-                onChange={(e) => setPreRegForm(prev => ({...prev, notes: e.target.value}))}
-                placeholder="Additional notes, shipping instructions, etc..."
-                className="min-h-[80px]"
+                value={qrForm.notes}
+                onChange={(e) => setQrForm({ ...qrForm, notes: e.target.value })}
+                placeholder="Add any notes about this device..."
+                rows={3}
               />
             </div>
           </div>
-          
           <DialogFooter>
             <Button 
               variant="outline" 
               onClick={() => {
-                setOpenPreReg(false);
-                setPreRegForm({
+                setOpenQrGenerate(false);
+                setQrForm({
                   imei: "",
-                  customer_name: "",
-                  customer_email: "",
-                  customer_phone: "",
-                  model: "",
-                  purchase_order: "",
+                  sim_number: "",
+                  device_model: "",
                   notes: ""
                 });
               }}
@@ -1562,10 +1557,12 @@ export default function ArchitectDashboard() {
               Cancel
             </Button>
             <Button 
-              onClick={addPreRegistration}
+              onClick={generateQrCode}
               className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={!qrForm.imei.trim() || !qrForm.sim_number.trim()}
             >
-              Pre-Register Device
+              <QrCode className="mr-2 h-4 w-4" />
+              Generate QR Code
             </Button>
           </DialogFooter>
         </DialogContent>
