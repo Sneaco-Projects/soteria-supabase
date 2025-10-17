@@ -1260,6 +1260,7 @@ export default function ArchitectDashboard() {
             </div>
           </div>
         </div>
+      </div>
 
       {/* Add device */}
       <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
