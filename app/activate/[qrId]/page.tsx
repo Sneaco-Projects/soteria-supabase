@@ -70,7 +70,7 @@ export default function DeviceActivation() {
         const { data: qrCode, error: qrError } = await supabase
           .from("device_qr_codes")
           .select("*")
-          .eq("qr_code", qrId)
+          .eq("qr_token", qrId)
           .maybeSingle();
 
         if (qrError) throw qrError;

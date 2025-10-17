@@ -654,8 +654,9 @@ export default function ArchitectDashboard() {
 
       // Generate unique QR code string
       const qrCodeId = crypto.randomUUID();
-      const qrToken = await supabase.rpc('generate_qr_token');
-      const qrCodeUrl = `${window.location.origin}/activate/${qrCodeId}`;
+      const qrTokenResult = await supabase.rpc('generate_qr_token');
+      const qrToken = qrTokenResult?.data || crypto.randomUUID().substring(0, 8).toUpperCase();
+      const qrCodeUrl = `${window.location.origin}/activate/${qrToken}`;
 
       const { error } = await supabase
         .from("device_qr_codes")
@@ -663,7 +664,7 @@ export default function ArchitectDashboard() {
           imei: qrForm.imei.trim(),
           sim_number: qrForm.sim_number.trim(),
           qr_code: qrCodeId,
-          qr_token: qrToken?.data || crypto.randomUUID().substring(0, 8).toUpperCase(),
+          qr_token: qrToken,
           qr_url: qrCodeUrl,
           device_model: qrForm.device_model.trim() || null,
           notes: qrForm.notes.trim() || null,
